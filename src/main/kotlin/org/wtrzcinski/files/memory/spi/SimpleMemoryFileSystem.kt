@@ -17,16 +17,28 @@
 package org.wtrzcinski.files.memory.spi
 
 import org.wtrzcinski.files.memory.MemorySegmentFileSystem
+import org.wtrzcinski.files.memory.attribute.MemoryFileAttributes.Companion.basic
+import org.wtrzcinski.files.memory.attribute.MemoryFileAttributes.Companion.owner
+import org.wtrzcinski.files.memory.attribute.MemoryFileAttributes.Companion.posix
+import org.wtrzcinski.files.memory.attribute.MemoryFileAttributes.Companion.user
 import java.io.File
-import java.nio.file.*
+import java.nio.file.FileSystem
+import java.nio.file.Path
+import java.nio.file.PathMatcher
+import java.nio.file.WatchService
 import java.nio.file.attribute.UserPrincipalLookupService
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.path.fileStore
 
+@OptIn(ExperimentalAtomicApi::class)
 internal data class SimpleMemoryFileSystem(
     val name: String,
     val env: Map<String, *>,
     val provider: SimpleMemoryFileSystemProvider,
 ) : FileSystem() {
+
+    private val closed = AtomicBoolean(false)
 
     val delegate: MemorySegmentFileSystem get() {
         val fileSystem = provider.fileSystem
@@ -69,11 +81,15 @@ internal data class SimpleMemoryFileSystem(
     }
 
     override fun close() {
-        provider.close()
+        if (closed.compareAndSet(false, true)) {
+            provider.close()
+        }
     }
 
-    override fun getFileStores(): Iterable<FileStore> {
-        return listOf(root.fileStore())
+    override fun getFileStores(): Iterable<SimpleMemoryFileStore> {
+        val fileStore = root.fileStore()
+        require(fileStore is SimpleMemoryFileStore)
+        return listOf(fileStore)
     }
 
     override fun isReadOnly(): Boolean {
@@ -84,18 +100,17 @@ internal data class SimpleMemoryFileSystem(
         return delegate.memory.scope().isAlive()
     }
 
-//    todo test Files#newDirectoryStream(Path dir, String glob)
-    override fun getPathMatcher(syntaxAndPattern: String?): PathMatcher? {
+    override fun supportedFileAttributeViews(): Set<String> {
+        return setOf(basic, posix, user, owner)
+    }
+
+    //    todo test Files#setOwner(Path path, UserPrincipal owner)
+    override fun getUserPrincipalLookupService(): UserPrincipalLookupService {
         TODO("Not yet implemented")
     }
 
-//    todo see LinuxFileSystem
-    override fun supportedFileAttributeViews(): Set<String?>? {
-        return setOf("basic", "posix")
-    }
-
-//    todo test Files#setOwner(Path path, UserPrincipal owner)
-    override fun getUserPrincipalLookupService(): UserPrincipalLookupService? {
+//    todo test Files#newDirectoryStream(Path dir, String glob)
+    override fun getPathMatcher(syntaxAndPattern: String?): PathMatcher? {
         TODO("Not yet implemented")
     }
 

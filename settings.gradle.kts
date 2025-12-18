@@ -1,4 +1,4 @@
-rootProject.name = "simple-file-system"
+rootProject.name = "jsmsfs"
 
 dependencyResolutionManagement {
     versionCatalogs {

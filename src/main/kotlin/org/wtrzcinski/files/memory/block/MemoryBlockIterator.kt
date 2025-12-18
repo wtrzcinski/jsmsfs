@@ -16,9 +16,9 @@
 
 package org.wtrzcinski.files.memory.block
 
-import org.wtrzcinski.files.memory.channels.ChannelInvalidStateException
-import org.wtrzcinski.files.memory.channels.MemoryChannelMode
-import org.wtrzcinski.files.memory.common.BlockStart
+import org.wtrzcinski.files.memory.exception.MemoryUnsupportedOperationException
+import org.wtrzcinski.files.memory.channel.MemoryOpenOptions
+import org.wtrzcinski.files.memory.ref.BlockStart
 import java.lang.AutoCloseable
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.concurrent.atomics.AtomicBoolean
@@ -29,7 +29,7 @@ import kotlin.concurrent.atomics.plusAssign
 @OptIn(ExperimentalAtomicApi::class)
 internal class MemoryBlockIterator(
     start: MemoryBlock,
-    val mode: MemoryChannelMode,
+    val mode: MemoryOpenOptions,
 ) : Iterator<MemoryBlock?>, AutoCloseable {
 
     private val closed = AtomicBoolean(false)
@@ -146,8 +146,7 @@ internal class MemoryBlockIterator(
     }
 
     override fun close() {
-        if (isOpen()) {
-            closed.exchange(true)
+        if (closed.compareAndSet(expectedValue = false, newValue = true)) {
             for (it in segments) {
                 it.close()
             }
@@ -156,7 +155,7 @@ internal class MemoryBlockIterator(
 
     private fun checkAccessible() {
         if (!isOpen()) {
-            throw ChannelInvalidStateException()
+            throw MemoryUnsupportedOperationException()
         }
     }
 }

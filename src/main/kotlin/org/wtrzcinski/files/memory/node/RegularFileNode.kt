@@ -16,6 +16,17 @@
 
 package org.wtrzcinski.files.memory.node
 
-sealed interface Node {
-    val name: String
-}
+import org.wtrzcinski.files.memory.ref.BlockStart
+
+internal class RegularFileNode(
+    name: String,
+    nodeRef: BlockStart,
+    dataRef: BlockStart = BlockStart.Invalid,
+    attrRef: BlockStart = BlockStart.Invalid,
+) : ValidNode(
+    nodeRef = nodeRef,
+    fileType = NodeType.RegularFile,
+    dataRef = dataRef,
+    attrsRef = attrRef,
+    name = name,
+)

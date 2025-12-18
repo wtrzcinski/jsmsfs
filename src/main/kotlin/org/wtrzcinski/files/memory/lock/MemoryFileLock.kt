@@ -16,20 +16,20 @@
 
 package org.wtrzcinski.files.memory.lock
 
-import org.wtrzcinski.files.memory.channels.MemoryChannelMode
+import org.wtrzcinski.files.memory.channel.MemoryOpenOptions
 import java.nio.file.StandardOpenOption
 
 interface MemoryFileLock {
-    fun acquire(mode: MemoryChannelMode): MemoryFileLock
+    fun acquire(mode: MemoryOpenOptions): MemoryFileLock
 
-    fun release(mode: MemoryChannelMode)
+    fun release(mode: MemoryOpenOptions)
 
     companion object {
         inline fun <T> MemoryFileLock.use(block: () -> T): T {
-            return use(MemoryChannelMode(StandardOpenOption.WRITE), block)
+            return use(MemoryOpenOptions(StandardOpenOption.WRITE), block)
         }
 
-        inline fun <T> MemoryFileLock.use(mode: MemoryChannelMode, block: () -> T): T {
+        inline fun <T> MemoryFileLock.use(mode: MemoryOpenOptions, block: () -> T): T {
             try {
                 acquire(mode)
                 return block.invoke()

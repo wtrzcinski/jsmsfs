@@ -16,6 +16,4 @@
 
 package org.wtrzcinski.files.memory.node
 
-sealed interface Node {
-    val name: String
-}
+internal class InvalidNode(override val name: String) : Node

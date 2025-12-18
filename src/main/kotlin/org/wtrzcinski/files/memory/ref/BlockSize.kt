@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.node
+package org.wtrzcinski.files.memory.ref
 
-sealed interface Node {
-    val name: String
+interface BlockSize {
+    val size: Long
 }

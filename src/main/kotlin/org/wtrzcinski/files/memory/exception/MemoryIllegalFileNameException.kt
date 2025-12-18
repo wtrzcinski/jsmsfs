@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.node
+package org.wtrzcinski.files.memory.exception
 
-sealed interface Node {
-    val name: String
-}
+import java.nio.file.FileSystemException
+
+class MemoryIllegalFileNameException : FileSystemException(null)

@@ -1,9 +1,9 @@
-Java Simple Memory Segment File System
---------------------------------------
+Java simple MemorySegment FileSystem
+------------------------------------
 
 [![license](https://img.shields.io/badge/license-Apache%20License%202.0-blue.svg?style=flat)](https://www.apache.org/licenses/LICENSE-2.0)
 
-Java Simple [File System](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/nio/file/package-summary.html) 
+Java simple [File System](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/nio/file/package-summary.html) 
 based on [Memory Segment](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/foreign/package-summary.html)
 
 Usage

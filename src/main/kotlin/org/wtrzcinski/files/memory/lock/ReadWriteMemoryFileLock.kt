@@ -16,15 +16,15 @@
 
 package org.wtrzcinski.files.memory.lock
 
-import org.wtrzcinski.files.memory.channels.MemoryChannelMode
-import org.wtrzcinski.files.memory.common.BlockStart
+import org.wtrzcinski.files.memory.channel.MemoryOpenOptions
+import org.wtrzcinski.files.memory.ref.BlockStart
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 internal open class ReadWriteMemoryFileLock(
-    val offset: BlockStart = BlockStart.of(-1),
-    private val reentrantReadWriteLock: ReentrantReadWriteLock = ReentrantReadWriteLock(true)
+    val offset: BlockStart = BlockStart.Invalid,
+    private val reentrantReadWriteLock: ReentrantReadWriteLock = ReentrantReadWriteLock(true),
 ) : MemoryFileLock {
-    override fun acquire(mode: MemoryChannelMode): ReadWriteMemoryFileLock {
+    override fun acquire(mode: MemoryOpenOptions): ReadWriteMemoryFileLock {
         if (mode.write) {
             reentrantReadWriteLock.writeLock().lock()
         } else {
@@ -33,7 +33,7 @@ internal open class ReadWriteMemoryFileLock(
         return this
     }
 
-    override fun release(mode: MemoryChannelMode) {
+    override fun release(mode: MemoryOpenOptions) {
         if (mode.write) {
             reentrantReadWriteLock.writeLock().unlock()
         } else {

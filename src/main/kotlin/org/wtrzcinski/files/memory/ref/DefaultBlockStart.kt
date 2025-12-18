@@ -14,8 +14,24 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.node
+package org.wtrzcinski.files.memory.ref
 
-sealed interface Node {
-    val name: String
+class DefaultBlockStart(override val start: Long) : BlockStart {
+
+    override fun toString(): String {
+        return "${javaClass.simpleName}(start=$start)"
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as BlockStart
+
+        return start == other.start
+    }
+
+    override fun hashCode(): Int {
+        return start.hashCode()
+    }
 }

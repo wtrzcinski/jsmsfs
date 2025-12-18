@@ -16,7 +16,9 @@
 
 package org.wtrzcinski.files.memory.bitmap
 
-import org.wtrzcinski.files.memory.common.Block
+import org.wtrzcinski.files.memory.ref.Block
+import org.wtrzcinski.files.memory.exception.BitmapOptimisticLockException
+import org.wtrzcinski.files.memory.exception.BitmapOutOfMemoryException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.concurrent.atomics.AtomicLong
@@ -96,7 +98,7 @@ class BitmapFreeBlocks {
 
     fun findBySize(byteSize: Long): Block {
         val segments1 = bySize[byteSize]
-        if (segments1 != null && segments1.isNotEmpty()) {
+        if (!segments1.isNullOrEmpty()) {
             return segments1.last()
         }
         val segmentToFindSize = byteSize * 2

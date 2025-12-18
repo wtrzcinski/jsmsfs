@@ -14,8 +14,24 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.node
+package org.wtrzcinski.files.memory.bitmap
 
-sealed interface Node {
-    val name: String
+import org.wtrzcinski.files.memory.ref.Block
+
+interface BitmapRegistry {
+    val reserved: BitmapReservedBlocks
+
+    val free: BitmapFreeBlocks
+
+    fun isReadOnly(): Boolean
+
+    fun reserveBySize(byteSize: Long, prev: Long, tag: String? = null): BitmapEntry
+
+    fun releaseAll(other: Block)
+
+    companion object {
+        operator fun invoke(memoryOffset: Long, memorySize: Long, readOnly: Boolean): BitmapRegistryGroup {
+            return BitmapRegistryGroup(memoryOffset = memoryOffset, totalByteSize = memorySize, readOnly = readOnly)
+        }
+    }
 }

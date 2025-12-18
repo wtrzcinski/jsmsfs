@@ -20,7 +20,7 @@ import org.junit.jupiter.api.extension.ExtensionContext
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.ArgumentsProvider
 import org.junit.jupiter.params.support.ParameterDeclarations
-import org.wtrzcinski.files.common.Fixtures
+import org.wtrzcinski.files.Fixtures
 import org.wtrzcinski.files.memory.MemoryScopeType
 import java.net.URI
 import java.nio.file.FileSystems

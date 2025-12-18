@@ -14,8 +14,21 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.node
+package org.wtrzcinski.files.memory.directory
 
-sealed interface Node {
-    val name: String
-}
+import org.wtrzcinski.files.memory.node.NodeType
+import org.wtrzcinski.files.memory.node.ValidNode
+import org.wtrzcinski.files.memory.ref.BlockStart
+
+internal class DirectoryNode(
+    name: String,
+    nodeRef: BlockStart,
+    dataRef: BlockStart = BlockStart.Invalid,
+    attrRef: BlockStart = BlockStart.Invalid,
+) : ValidNode(
+    nodeRef = nodeRef,
+    fileType = NodeType.Directory,
+    dataRef = dataRef,
+    attrsRef = attrRef,
+    name = name,
+)

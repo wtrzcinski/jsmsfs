@@ -16,59 +16,63 @@
 
 package org.wtrzcinski.files.memory.spi
 
-import org.wtrzcinski.files.memory.MemorySegmentFileSystem
+import org.wtrzcinski.files.memory.bitmap.BitmapRegistryGroup
+import org.wtrzcinski.files.memory.block.MemoryBlockRegistry
 import java.nio.file.FileStore
 import java.nio.file.attribute.FileAttributeView
 import java.nio.file.attribute.FileStoreAttributeView
 
 internal class SimpleMemoryFileStore(
-    private val context: MemorySegmentFileSystem,
+    private val bitmapStore: BitmapRegistryGroup,
+    private val blockStore: MemoryBlockRegistry,
 ) : FileStore() {
     val sizeFactor: Double
         get() {
-            val reserved = context.bitmapStore.reserved.size.toDouble()
-            val result = reserved / context.memory.byteSize()
+            val reserved = bitmapStore.reserved.size.toDouble()
+            val result = reserved / bitmapStore.totalByteSize
             require(result <= 1)
             return result
         }
 
     val headerSpaceFactor: Double
         get() {
-            val metadataSize: Double = (context.bitmapStore.reserved.count * context.blockStore.headerSize).toDouble()
-            return metadataSize / context.bitmapStore.reserved.size
+            val metadataSize: Double = (bitmapStore.reserved.count * blockStore.headerSize).toDouble()
+            return metadataSize / bitmapStore.reserved.size
         }
 
     val wastedSpaceFactor: Double
         get() {
-            val wastedSpaceSize = context.bitmapStore.free.findSizeSum(context.blockStore.minMemoryBlockSize)
-            return wastedSpaceSize / context.bitmapStore.reserved.size
+            val wastedSpaceSize = bitmapStore.free.findSizeSum(segmentSizeLt = blockStore.minMemoryBlockSize)
+            return wastedSpaceSize / bitmapStore.reserved.size
         }
 
+    val used: Long get() = bitmapStore.reserved.size
+
     override fun name(): String {
-        return context.toString()
+        return bitmapStore.toString()
     }
 
     override fun type(): String {
-        return context.toString()
+        return bitmapStore.toString()
     }
 
     override fun getTotalSpace(): Long {
-        return context.memory.byteSize()
+        return bitmapStore.totalByteSize
     }
 
     override fun getUnallocatedSpace(): Long {
-        return context.blockStore.bitmap.free.size
+        return bitmapStore.free.size
     }
 
     override fun getUsableSpace(): Long {
-        return context.memory.byteSize()
+        return bitmapStore.totalByteSize
     }
 
     override fun isReadOnly(): Boolean {
-        return context.memory.isReadOnly()
+        return bitmapStore.isReadOnly()
     }
 
-    override fun supportsFileAttributeView(type: Class<out FileAttributeView?>?): Boolean {
+    override fun supportsFileAttributeView(type: Class<out FileAttributeView>): Boolean {
         TODO("Not yet implemented")
     }
 

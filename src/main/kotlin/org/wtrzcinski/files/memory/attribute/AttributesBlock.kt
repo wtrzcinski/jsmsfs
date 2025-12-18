@@ -14,8 +14,17 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.node
+package org.wtrzcinski.files.memory.attribute
 
-sealed interface Node {
-    val name: String
-}
+import java.nio.file.attribute.PosixFilePermission
+import java.nio.file.attribute.PosixFilePermissions
+import java.time.Instant
+
+class AttributesBlock(
+    val lastAccessTime: Instant = Instant.ofEpochSecond(0, 0),
+    val lastModifiedTime: Instant = Instant.ofEpochSecond(0, 0),
+    val creationTime: Instant = Instant.ofEpochSecond(0, 0),
+    val permissions: Set<PosixFilePermission> = PosixFilePermissions.fromString("rwx".repeat(3)),
+    val owner: String = "",
+    val group: String = "",
+)

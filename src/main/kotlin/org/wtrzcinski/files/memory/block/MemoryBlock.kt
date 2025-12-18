@@ -16,29 +16,28 @@
 
 package org.wtrzcinski.files.memory.block
 
-import org.wtrzcinski.files.memory.block.byteBuffer.MemoryBlockByteBuffer
-import org.wtrzcinski.files.memory.block.store.MemoryBlockStore
-import org.wtrzcinski.files.memory.channels.MemoryChannelMode
-import org.wtrzcinski.files.memory.channels.MemorySeekableByteChannel
-import org.wtrzcinski.files.memory.common.Block
-import org.wtrzcinski.files.memory.common.BlockStart
+import org.wtrzcinski.files.memory.byteBuffer.MemoryBlockByteBuffer
+import org.wtrzcinski.files.memory.channel.MemoryOpenOptions
+import org.wtrzcinski.files.memory.channel.MemorySeekableByteChannel
+import org.wtrzcinski.files.memory.ref.Block
+import org.wtrzcinski.files.memory.ref.BlockStart
 import org.wtrzcinski.files.memory.lock.MemoryFileLock
 
 internal class MemoryBlock(
-    private val segments: MemoryBlockStore,
+    private val segments: MemoryBlockRegistry,
     override var start: Long,
     initialBodySize: Long? = null,
-    initialNextRef: Long? = null,
+    initialNextRef: BlockStart? = null,
 ) : Block, AutoCloseable {
 
     init {
         if (initialBodySize != null) {
             val byteBuffer = newBodySizeBuffer()
-            byteBuffer.writeMeta(value = initialBodySize)
+            byteBuffer.writeSize(value = initialBodySize)
         }
         if (initialNextRef != null) {
             val byteBuffer = newNextRefBuffer()
-            byteBuffer.writeMeta(value = initialNextRef)
+            byteBuffer.writeRef(value = initialNextRef)
         }
     }
 
@@ -49,7 +48,7 @@ internal class MemoryBlock(
     val bodySize: Long
         get() {
             val byteBuffer = newBodySizeBuffer()
-            return byteBuffer.readMeta()
+            return byteBuffer.readRef().start
         }
 
     val bodyBuffer: MemoryBlockByteBuffer by lazy {
@@ -61,7 +60,7 @@ internal class MemoryBlock(
             return bodyBuffer.position()
         }
 
-    fun newByteChannel(mode: MemoryChannelMode, lock: MemoryFileLock? = null): MemorySeekableByteChannel {
+    fun newByteChannel(mode: MemoryOpenOptions, lock: MemoryFileLock? = null): MemorySeekableByteChannel {
         return MemorySeekableByteChannel(start = this, mode = mode, lock = lock)
     }
 
@@ -76,9 +75,8 @@ internal class MemoryBlock(
     fun reserveNext(): MemoryBlock {
         val next = segments.reserveSegment(prevOffset = start)
         require(next.start != this.start)
-        val nextOffset = next.start
         val byteBuffer = newNextRefBuffer()
-        byteBuffer.writeMeta(value = nextOffset)
+        byteBuffer.writeRef(value = next)
         return next
     }
 
@@ -92,9 +90,9 @@ internal class MemoryBlock(
 
     fun readNextRef(): BlockStart? {
         val byteBuffer = newNextRefBuffer()
-        val nextRef = byteBuffer.readMeta()
-        if (nextRef > 0) {
-            return BlockStart.of(nextRef)
+        val nextRef = byteBuffer.readRef()
+        if (nextRef.isValid()) {
+            return nextRef
         }
         return null
     }
@@ -106,7 +104,7 @@ internal class MemoryBlock(
             segments.releaseAll(other = divide.second)
 
             val byteBuffer = newBodySizeBuffer()
-            byteBuffer.writeMeta(value = newBodySize.toLong())
+            byteBuffer.writeSize(value = newBodySize.toLong())
         }
     }
 

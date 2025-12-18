@@ -16,9 +16,9 @@
 
 package org.wtrzcinski.files.memory.spi
 
-import org.wtrzcinski.files.memory.node.Directory
+import org.wtrzcinski.files.memory.directory.DirectoryNode
+import org.wtrzcinski.files.memory.node.InvalidNode
 import org.wtrzcinski.files.memory.node.Node
-import org.wtrzcinski.files.memory.node.Unknown
 import java.io.File
 import java.net.URI
 import java.nio.file.*
@@ -54,7 +54,7 @@ internal data class SimpleMemoryPath(
     }
 
     override fun resolve(opath: String): SimpleMemoryPath {
-        return resolve(opath.split("/"))
+        return resolve(opath.split(File.separatorChar))
     }
 
     fun resolve(split: List<String>): SimpleMemoryPath {
@@ -63,18 +63,23 @@ internal data class SimpleMemoryPath(
             return this
         }
 
+        val actualFileSystem = fileSystem.provider().fileSystem
+        requireNotNull(actualFileSystem)
+
         var result: SimpleMemoryPath = this
         for (name in names) {
             result = result.resolve { parent ->
                 val directory = parent?.node
                 require(directory != null)
 
-                if (directory is Directory) {
-                    val existing = directory.findChildByName(name)
-                    existing ?: Unknown(directory.fileSystem, name = name)
-                } else {
-                    Unknown(directory.fileSystem, name = name)
+                var existing: Node? = null
+                if (directory is DirectoryNode) {
+                    existing = actualFileSystem.findChildByName(directory, name)
                 }
+                if (existing == null) {
+                    existing = InvalidNode(name = name)
+                }
+                existing
             }
         }
         return result
@@ -104,17 +109,22 @@ internal data class SimpleMemoryPath(
 
         val scheme = provider.scheme
         val joinToString = toStringList().joinToString(File.separator)
-        return URI.create("$scheme:/$joinToString?${fileSystem.name}")
+        val name = fileSystem.name
+        if (name.isNotBlank()) {
+            return URI.create("$scheme:/$joinToString?$name")
+        } else {
+            return URI.create("$scheme:/$joinToString")
+        }
     }
 
-    fun toStringList(): List<String> {
+    fun toStringList(): Sequence<String> {
         val names = toNodeList()
         return names
             .map { it.name }
             .filter { it != File.separator }
     }
 
-    fun toNodeList(): List<Node> {
+    fun toNodeList(): Sequence<Node> {
         val nodes = mutableListOf<Node>()
         var current: SimpleMemoryPath? = this
         while (current != null) {
@@ -123,7 +133,7 @@ internal data class SimpleMemoryPath(
             current = current.parent
         }
         val result = nodes.reversed()
-        return result
+        return result.asSequence()
     }
 
     override fun toString(): String {
@@ -139,7 +149,7 @@ internal data class SimpleMemoryPath(
 
     override fun getNameCount(): Int {
         val toStringList = toStringList()
-        return toStringList.size
+        return toStringList.count()
     }
 
     override fun getFileName(): Path? {
