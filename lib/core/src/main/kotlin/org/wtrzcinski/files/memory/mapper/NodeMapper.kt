@@ -1,0 +1,74 @@
+/**
+ * Copyright 2025 Wojciech Trzciński
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.wtrzcinski.files.memory.mapper
+
+import org.wtrzcinski.files.memory.MemoryLedger
+import org.wtrzcinski.files.memory.address.BlockStart
+import org.wtrzcinski.files.memory.buffer.channel.FragmentedReadWriteBuffer
+import org.wtrzcinski.files.memory.exception.MemoryIllegalStateException
+import org.wtrzcinski.files.memory.mapper.MemoryMapperRegistry.Companion.intByteSize
+import org.wtrzcinski.files.memory.node.NodeType
+import org.wtrzcinski.files.memory.util.AbstractCloseable
+
+internal class NodeMapper(
+    memory: MemoryLedger,
+) : BlockBodyMapper, AbstractCloseable() {
+
+    private val size = intByteSize + (memory.offsetBytes * 3)
+    private val dataPosition: Long = intByteSize.size
+    private val attrPosition: Long = intByteSize.size + memory.offsetBytes.toLong()
+    private val namePosition: Long = intByteSize.size + (memory.offsetBytes.toLong() * 2)
+
+    private val buffer: FragmentedReadWriteBuffer
+
+    init {
+        buffer = memory.newByteChannel(bodySize = size)
+    }
+
+    fun writeType(type: NodeType) {
+        require(buffer.position() == 0L)
+
+        buffer.writeInt(type.ordinal)
+    }
+
+    fun writeDataOffset(offset: BlockStart) {
+        require(buffer.position() == dataPosition)
+
+        buffer.writeOffset(offset)
+    }
+
+    fun writeAttrOffset(offset: BlockStart) {
+        require(buffer.position() == attrPosition)
+
+        buffer.writeOffset(offset)
+    }
+
+    fun writeNameOffset(offset: BlockStart) {
+        require(buffer.position() == namePosition)
+
+        buffer.writeOffset(offset)
+    }
+
+    override fun flip(): BlockStart {
+        if (tryClose()) {
+            require(buffer.position() == size.size)
+            buffer.close()
+            return buffer.first()
+        }
+        throw MemoryIllegalStateException()
+    }
+}

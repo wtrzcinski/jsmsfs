@@ -15,59 +15,41 @@
  */
 
 plugins {
-    kotlin("jvm") version "2.2.21"
-    id("org.jetbrains.dokka") version "2.1.0"
-    `maven-publish`
+    kotlin("jvm") version "2.2.20" apply false
+    id("org.jetbrains.dokka") version "2.1.0" apply false
 }
 
-val javaVersion = 24
-group = "org.wtrzcinski.files"
-version = "0.2.0"
+subprojects {
+    val javaVersion = 24
+    group = "org.wtrzcinski.files"
+    version = "0.2.0"
 
-plugins.withType<JavaPlugin> {
-    the<JavaPluginExtension>().apply {
-        toolchain {
-            languageVersion = JavaLanguageVersion.of(javaVersion)
+    plugins.withType<JavaPlugin> {
+        the<JavaPluginExtension>().apply {
+            toolchain {
+                languageVersion = JavaLanguageVersion.of(javaVersion)
+            }
         }
     }
-}
 
-tasks.withType<JavaCompile> {
-    sourceCompatibility = "$javaVersion"
-    targetCompatibility = "$javaVersion"
-}
-
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
-    compilerOptions {
-        freeCompilerArgs.addAll("-Xjsr305=strict", "-Xannotation-default-target=param-property")
+    tasks.withType<JavaCompile> {
+        sourceCompatibility = "$javaVersion"
+        targetCompatibility = "$javaVersion"
     }
-}
 
-dokka {
-    dokkaPublications.html {
-        outputDirectory.set(layout.buildDirectory.dir("dokka"))
+    tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
+        compilerOptions {
+            freeCompilerArgs.addAll("-Xjsr305=strict", "-Xannotation-default-target=param-property")
+        }
     }
-}
 
-tasks.withType<Test> {
-    useJUnitPlatform()
-}
+    tasks.withType<Test> {
+        useJUnitPlatform()
+    }
 
-repositories {
-    mavenLocal()
-    mavenCentral()
-}
-
-dependencies {
-    implementation("org.jetbrains.kotlin:kotlin-reflect:2.2.21")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
-
-    testImplementation("org.jetbrains.kotlin:kotlin-test-junit5:2.2.21")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
-    testImplementation("org.assertj:assertj-core:3.27.6")
-    testImplementation(libs.junit.jupiter.engine)
-    testImplementation(libs.junit.jupiter.params)
-    testImplementation(libs.junit.platform.suite)
-    testRuntimeOnly(libs.junit.platform.launcher)
+    repositories {
+        mavenLocal()
+        mavenCentral()
+    }
 }
 
