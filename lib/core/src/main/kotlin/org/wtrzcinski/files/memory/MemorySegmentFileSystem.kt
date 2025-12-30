@@ -106,33 +106,29 @@ internal class MemorySegmentFileSystem(
         )
 
         var dataSegmentRef: BlockStart? = readDataOffset(child)
+
         val childLock = lockRegistry.newLock(offset = child, mode = mode)
         childLock.acquire()
-        if (dataSegmentRef == null) {
-            dataSegmentRef = readDataOffset(child)
-            if (dataSegmentRef == null) {
-                require(mode.write)
 
-                val dataSegment = memory.newByteChannel(mode = mode, lock = childLock)
-                updateDataOffset(nodeRef = child, newDataRef = dataSegment.first())
-                return dataSegment
-            } else {
-                val dataByteChannel = memory.existingByteChannel(mode = mode, offset = dataSegmentRef, lock = childLock)
-                if (mode.append) {
-                    dataByteChannel.append()
+        try {
+            if (dataSegmentRef == null) {
+                dataSegmentRef = readDataOffset(child)
+                if (dataSegmentRef == null) {
+                    require(mode.write)
+
+                    val dataSegment = memory.newByteChannel(mode = mode, lock = childLock)
+                    updateDataOffset(nodeRef = child, newDataRef = dataSegment.first())
+                    return dataSegment
                 } else {
-                    dataByteChannel.truncate()
+                    return memory.existingByteChannel(mode = mode, offset = dataSegmentRef, lock = childLock)
                 }
-                return dataByteChannel
-            }
-        } else {
-            val dataByteChannel = memory.existingByteChannel(mode = mode, offset = dataSegmentRef, lock = childLock)
-            if (mode.append) {
-                dataByteChannel.append()
             } else {
-                dataByteChannel.truncate()
+                return memory.existingByteChannel(mode = mode, offset = dataSegmentRef, lock = childLock)
             }
-            return dataByteChannel
+        } catch (e: Exception) {
+            childLock.release()
+
+            throw e
         }
     }
 

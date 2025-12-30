@@ -59,7 +59,7 @@ abstract class MemoryLedger(
         assertTrue(offset.isValid())
 
         val first = MemoryBlockReadWriteMapper.existingBlock(memory = this, offset = offset)
-        return FragmentedReadWriteBuffer(
+        val channel = FragmentedReadWriteBuffer(
             lock = lock,
             data = MemoryBlockMapperIterator(
                 memory = this,
@@ -67,6 +67,14 @@ abstract class MemoryLedger(
                 mode = mode,
             ),
         )
+        if (mode.write) {
+            if (mode.append) {
+                return channel.append()
+            } else if (mode.truncate) {
+                return channel.truncate()
+            }
+        }
+        return channel
     }
 
     fun newByteChannel(
