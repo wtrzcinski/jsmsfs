@@ -16,29 +16,41 @@
 
 package org.wtrzcinski.files.memory.mapper
 
-import org.wtrzcinski.files.memory.MemoryLedger
+import org.wtrzcinski.files.memory.MemorySegmentLedger
 import org.wtrzcinski.files.memory.address.ByteSize
+import org.wtrzcinski.files.memory.mode.Mode
+import org.wtrzcinski.files.memory.node.AttributesBlock
+import java.time.Instant
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
-internal class MemoryMapperRegistry(
-    val memory: MemoryLedger,
-) {
+class MemoryMapperRegistry(val memory: MemorySegmentLedger) {
     companion object {
         val intByteSize: ByteSize = ByteSize(value = Int.SIZE_BYTES.toLong())
         val longByteSize: ByteSize = ByteSize(value = Long.SIZE_BYTES.toLong())
         val instantByteSize: ByteSize = longByteSize + intByteSize
     }
 
-    fun startAttrs(): AttrsMapper {
-        return AttrsMapper(memory = memory)
+    fun createName(name: String): NameMapper {
+        val nameMapper = NameMapper(memory = memory)
+        nameMapper.writeName(name)
+        return nameMapper
     }
 
-    fun startNode(): NodeMapper {
-        return NodeMapper(memory = memory)
+    fun createAttrs(name: String): AttrsMapper {
+        val attrs = AttributesBlock(now = Instant.now())
+        val attrsMapper = AttrsMapper(memory = memory, name = name)
+        attrsMapper.writeLastAccessTime(attrs.lastAccessTime)
+        attrsMapper.writeLastModifiedTime(attrs.lastModifiedTime)
+        attrsMapper.writeCreationTime(attrs.creationTime)
+        attrsMapper.writePermissions(attrs.permissions)
+        attrsMapper.writeOwner(attrs.owner)
+        attrsMapper.writeGroup(attrs.group)
+        return attrsMapper
     }
 
-    fun startName(): NameMapper {
-        return NameMapper(memory = memory)
+    fun createFile(name: String): NodeMapper {
+        val result = NodeMapper(memory = memory, name = name, mode = Mode.readWrite())
+        return result
     }
 }

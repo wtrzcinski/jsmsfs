@@ -14,50 +14,49 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.buffer
+package org.wtrzcinski.files.memory.buffer.chunk
 
 import org.wtrzcinski.files.memory.address.BlockStart
 import org.wtrzcinski.files.memory.address.ByteSize
-import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer.Companion.InvalidRef
-import org.wtrzcinski.files.memory.mapper.MemoryMapperRegistry.Companion.intByteSize
-import org.wtrzcinski.files.memory.util.Preconditions.assertTrue
-import org.wtrzcinski.files.memory.util.Preconditions.requireTrue
+import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer
+import org.wtrzcinski.files.memory.mapper.MemoryMapperRegistry
+import org.wtrzcinski.files.memory.util.Check
 import java.lang.foreign.MemorySegment
 
-internal class IntMemoryByteBuffer(
+internal class IntReadWriteBuffer(
     memorySegment: MemorySegment,
-    release: (MemoryByteBuffer) -> Unit = {},
-) : MemoryByteBuffer(
+    release: (ChunkReadWriteBuffer) -> Unit = {},
+) : ChunkReadWriteBuffer(
     memorySegment = memorySegment,
     byteBuffer = memorySegment.asByteBuffer(),
     release = release,
 ) {
 
-    override val offsetBytes: ByteSize get() = intByteSize
+    override val offsetBytes: ByteSize get() = MemoryMapperRegistry.Companion.intByteSize
 
     override fun readOffset(): BlockStart? {
         val value = readUnsignedInt() ?: return null
-        requireTrue(value >= 0)
-        return BlockStart(value)
+        Check.isTrue { value >= 0 }
+        return BlockStart.Companion(value)
     }
 
     override fun writeOffset(value: BlockStart) {
         if (!value.isValid()) {
-            writeInt(InvalidRef.toInt())
+            writeInt(MemoryReadWriteBuffer.Companion.InvalidRef.toInt())
         } else {
-            assertTrue(value.start >= 0)
+            Check.isTrue { value.start >= 0 }
             writeUnsignedInt(value.start)
         }
     }
 
     override fun readSize(): ByteSize {
-        val value = readUnsignedInt() ?: return ByteSize.InvalidSize
-        assertTrue(value >= 0)
+        val value = readUnsignedInt() ?: return ByteSize.Companion.InvalidSize
+        Check.isTrue { value >= 0 }
         return ByteSize(value)
     }
 
     override fun writeSize(value: ByteSize) {
-        assertTrue(value.size >= 0)
+        Check.isTrue { value.size >= 0 }
         writeUnsignedInt(value.size)
     }
 }

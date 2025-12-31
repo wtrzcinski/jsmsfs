@@ -17,23 +17,24 @@
 package org.wtrzcinski.files.memory.node
 
 import org.wtrzcinski.files.memory.address.BlockStart
-import org.wtrzcinski.files.memory.util.Preconditions.requireTrue
+import org.wtrzcinski.files.memory.address.DefaultBlockStart
+import org.wtrzcinski.files.memory.util.Check.isTrue
 
-internal sealed class ValidNode(
+sealed class ValidNode(
     val fileType: NodeType,
-    val offset: BlockStart,
-    val dataRef: BlockStart = BlockStart.InvalidAddress,
-    val attrsRef: BlockStart = BlockStart.InvalidAddress,
-    val nameRef: BlockStart = BlockStart.InvalidAddress,
+    val offset: DefaultBlockStart,
+    val dataRef: DefaultBlockStart = BlockStart.InvalidAddress,
+    val attrsRef: DefaultBlockStart = BlockStart.InvalidAddress,
+    val nameRef: DefaultBlockStart = BlockStart.InvalidAddress,
     override val name: String,
-): NamedNode {
+) : NamedNode {
 
     init {
-        requireTrue(offset.isValid())
+        isTrue { offset.isValid() }
     }
 
     override fun toString(): String {
-        return "${javaClass.simpleName}(fileType=$fileType, nodeRef=$offset, name='$name', dataRef=$dataRef)"
+        return "${javaClass.simpleName}(fileType=$fileType, nodeRef=$offset, name='$name')"
     }
 
     override fun equals(other: Any?): Boolean {
@@ -45,8 +46,6 @@ internal sealed class ValidNode(
         if (fileType != other.fileType) return false
         if (offset != other.offset) return false
         if (name != other.name) return false
-        if (dataRef != other.dataRef) return false
-        if (attrsRef != other.attrsRef) return false
 
         return true
     }
@@ -55,8 +54,6 @@ internal sealed class ValidNode(
         var result = fileType.hashCode()
         result = 31 * result + offset.hashCode()
         result = 31 * result + name.hashCode()
-        result = 31 * result + dataRef.hashCode()
-        result = 31 * result + attrsRef.hashCode()
         return result
     }
 }

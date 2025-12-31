@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.address
+package org.wtrzcinski.files.memory.mode
 
-interface BlockSize {
-    val size: Long
+import java.nio.file.OpenOption
 
-    fun isEmpty(): Boolean {
-        return size == 0L
-    }
+enum class WriteMode: OpenOption {
+    RequireNew,
+    TruncateExisting,
+    AppendToExisting,
+    UseExisting,
 }

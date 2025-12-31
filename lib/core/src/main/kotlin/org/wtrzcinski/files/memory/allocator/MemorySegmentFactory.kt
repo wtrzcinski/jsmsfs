@@ -20,9 +20,5 @@ import java.lang.foreign.MemorySegment
 import java.lang.foreign.SegmentAllocator
 
 interface MemorySegmentFactory : AutoCloseable, SegmentAllocator {
-    fun isReadOnly(): Boolean {
-        return false
-    }
-
     override fun allocate(byteSize: Long, byteAlignmen: Long): MemorySegment
 }

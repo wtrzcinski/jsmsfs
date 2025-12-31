@@ -32,6 +32,8 @@ dependencies {
     api("org.jetbrains.kotlin:kotlin-reflect")
     api(libs.slf4j.api)
 
+    implementation("org.apache.arrow:arrow-memory-netty:18.3.0")
+
     testImplementation(libs.slf4j.simple)
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")

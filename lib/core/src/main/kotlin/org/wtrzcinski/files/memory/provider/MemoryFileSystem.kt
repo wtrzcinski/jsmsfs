@@ -17,40 +17,42 @@
 package org.wtrzcinski.files.memory.provider
 
 import org.wtrzcinski.files.memory.MemorySegmentFileSystem
-import org.wtrzcinski.files.memory.node.MemoryPath
-import org.wtrzcinski.files.memory.node.attribute.MemoryFileAttributes.Companion.basic
-import org.wtrzcinski.files.memory.node.attribute.MemoryFileAttributes.Companion.owner
-import org.wtrzcinski.files.memory.node.attribute.MemoryFileAttributes.Companion.posix
-import org.wtrzcinski.files.memory.node.attribute.MemoryFileAttributes.Companion.user
+import org.wtrzcinski.files.memory.mode.AbstractCloseable
+import org.wtrzcinski.files.memory.path.FilePath
+import org.wtrzcinski.files.memory.path.HardFilePath
+import org.wtrzcinski.files.memory.provider.MemoryFileAttributes.Companion.basic
+import org.wtrzcinski.files.memory.provider.MemoryFileAttributes.Companion.owner
+import org.wtrzcinski.files.memory.provider.MemoryFileAttributes.Companion.posix
+import org.wtrzcinski.files.memory.provider.MemoryFileAttributes.Companion.user
 import java.io.File
 import java.nio.file.FileSystem
 import java.nio.file.Path
 import java.nio.file.PathMatcher
 import java.nio.file.WatchService
 import java.nio.file.attribute.UserPrincipalLookupService
-import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.path.fileStore
 
 @OptIn(ExperimentalAtomicApi::class)
-internal data class MemoryFileSystem(
+data class MemoryFileSystem(
     val name: String,
     val env: Map<String, *>,
     val provider: MemoryFileSystemProvider,
 ) : FileSystem() {
 
-    private val closed = AtomicBoolean(false)
+    private val monitor = AbstractCloseable()
 
-    val delegate: MemorySegmentFileSystem get() {
-        val fileSystem = provider.fileSystem
-        requireNotNull(fileSystem)
-        return fileSystem
-    }
+    val delegate: MemorySegmentFileSystem
+        get() {
+            val fileSystem = provider.fileSystem
+            requireNotNull(fileSystem)
+            return fileSystem
+        }
 
-    val root: MemoryPath = MemoryPath(
+    internal val root: HardFilePath = HardFilePath(
         fs = this,
         parent = null,
-        nodeSupplier = { delegate.root() },
+        nodeRef = delegate.rootRef,
     )
 
     override fun toString(): String {
@@ -62,15 +64,7 @@ internal data class MemoryFileSystem(
     }
 
     override fun getPath(path: String, vararg more: String): Path {
-        if (path == File.separator) {
-            if (more.isEmpty()) {
-                return root
-            }
-        }
-
-        val split = path.split(File.separator)
-        val join = split + more
-        return root.resolve(join)
+        return FilePath.getPath(root, path, *more)
     }
 
     override fun getRootDirectories(): Iterable<Path> {
@@ -82,7 +76,7 @@ internal data class MemoryFileSystem(
     }
 
     override fun close() {
-        if (closed.compareAndSet(false, true)) {
+        if (monitor.tryClose()) {
             provider.close()
         }
     }
@@ -94,11 +88,11 @@ internal data class MemoryFileSystem(
     }
 
     override fun isReadOnly(): Boolean {
-        return delegate.memoryFactory.isReadOnly()
+        return delegate.isReadOnly()
     }
 
     override fun isOpen(): Boolean {
-        return delegate.memorySegment.scope().isAlive()
+        return delegate.isAlive()
     }
 
     override fun supportedFileAttributeViews(): Set<String> {
@@ -110,7 +104,7 @@ internal data class MemoryFileSystem(
         TODO("Not yet implemented")
     }
 
-//    todo test Files#newDirectoryStream(Path dir, String glob)
+    //    todo test Files#newDirectoryStream(Path dir, String glob)
     override fun getPathMatcher(syntaxAndPattern: String?): PathMatcher? {
         TODO("Not yet implemented")
     }

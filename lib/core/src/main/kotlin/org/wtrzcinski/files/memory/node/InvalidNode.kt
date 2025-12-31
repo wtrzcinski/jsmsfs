@@ -16,4 +16,4 @@
 
 package org.wtrzcinski.files.memory.node
 
-internal class InvalidNode(override val name: String) : NamedNode
+class InvalidNode(override val name: String) : NamedNode

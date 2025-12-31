@@ -53,7 +53,7 @@ interface BlockStart : Comparable<BlockStart> {
     }
 
     companion object {
-        val InvalidAddress: BlockStart = DefaultBlockStart(start = InvalidRef)
+        val InvalidAddress: DefaultBlockStart = DefaultBlockStart(start = InvalidRef)
 
         operator fun invoke(offset: Long): BlockStart {
             if (offset == InvalidRef) {

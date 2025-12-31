@@ -17,7 +17,6 @@
 package org.wtrzcinski.files
 
 import org.wtrzcinski.files.arguments.PathProvider
-import java.io.File
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
@@ -59,9 +58,5 @@ object Fixtures {
 
     fun PathProvider.newRandomPath(): Path {
         return getPath(newUniqueString())
-    }
-
-    fun PathProvider.getRootPath(): Path {
-        return getPath(File.separator)
     }
 }

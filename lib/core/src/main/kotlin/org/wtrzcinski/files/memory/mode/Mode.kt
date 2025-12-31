@@ -14,34 +14,28 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.lock
+package org.wtrzcinski.files.memory.mode
 
-import org.wtrzcinski.files.memory.provider.MemoryFileOpenOptions
-
-data class MemoryFileLock(
-    val mode: MemoryFileOpenOptions,
-    private val lock: ReadWriteMemoryFileLock,
+data class Mode(
+    val open: OpenMode,
+    val write: WriteMode,
+    val read: ReadMode = ReadMode.Block,
 ) {
     companion object {
-        inline fun <T> MemoryFileLock.use(block: () -> T): T {
-            try {
-                acquire()
-                return block.invoke()
-            } finally {
-                release()
+        fun readOnly(): Mode {
+            return of(true)
+        }
+
+        fun readWrite(): Mode {
+            return of(false)
+        }
+
+        fun of(readOnly: Boolean): Mode {
+            return if (readOnly) {
+                Mode(OpenMode.ReadOnly, WriteMode.UseExisting, ReadMode.Block)
+            } else {
+                Mode(OpenMode.ReadWrite, WriteMode.RequireNew, ReadMode.Block)
             }
         }
-    }
-
-    fun refCount(): Int {
-        return lock.refCount()
-    }
-
-    fun acquire() {
-        lock.acquire(mode)
-    }
-
-    fun release() {
-        lock.release(mode)
     }
 }

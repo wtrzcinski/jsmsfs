@@ -16,17 +16,14 @@
 
 package org.wtrzcinski.files.memory.provider
 
-import org.wtrzcinski.files.memory.MemoryLedger
+import org.wtrzcinski.files.memory.MemorySegmentLedger
 import org.wtrzcinski.files.memory.address.ByteSize
-import org.wtrzcinski.files.memory.bitmap.BitmapRegistryGroup
 import java.nio.file.FileStore
 import java.nio.file.attribute.FileAttributeView
 import java.nio.file.attribute.FileStoreAttributeView
 
-internal class MemoryFileStore(
-    private val bitmapStore: BitmapRegistryGroup,
-    private val ledger: MemoryLedger,
-) : FileStore() {
+class MemoryFileStore(val ledger: MemorySegmentLedger) : FileStore() {
+
     val reservedCount: Int
         get() {
             return ledger.bitmap.reserved.count
@@ -34,8 +31,8 @@ internal class MemoryFileStore(
 
     val reservedSpaceFactor: Double
         get() {
-            val reserved = ledger.bitmap.reserved.byteSize.size.toDouble()
-            val total = bitmapStore.totalByteSize
+            val reserved = ledger.bitmap.reserved.size.size.toDouble()
+            val total = ledger.bitmap.totalByteSize
             val result = reserved / total.size
             check(result <= 1)
             return result
@@ -43,42 +40,42 @@ internal class MemoryFileStore(
 
     val metadataSpaceFactor: Double
         get() {
-            val metadataSize: Double = (bitmapStore.reserved.count * ledger.headerBytes.size).toDouble()
-            return metadataSize / bitmapStore.reserved.byteSize.toDouble()
+            val metadataSize: Double = (ledger.bitmap.reserved.count * ledger.headerBytes.size).toDouble()
+            return metadataSize / ledger.bitmap.reserved.size.toDouble()
         }
 
     val wastedSpaceFactor: Double
         get() {
-            val wastedSpaceSize: Double = bitmapStore.free.findSizeSum(segmentSizeLt = ledger.headerBytes)
-            return wastedSpaceSize / bitmapStore.reserved.byteSize.toDouble()
+            val wastedSpaceSize: Double = ledger.bitmap.free.findSizeSum(segmentSizeLt = ledger.headerBytes)
+            return wastedSpaceSize / ledger.bitmap.reserved.size.toDouble()
         }
 
     val used: ByteSize get() {
-        return bitmapStore.reserved.byteSize
+        return ledger.bitmap.reserved.size
     }
 
     override fun name(): String {
-        return bitmapStore.toString()
+        return ledger.bitmap.toString()
     }
 
     override fun type(): String {
-        return bitmapStore.toString()
+        return ledger.bitmap.toString()
     }
 
     override fun getTotalSpace(): Long {
-        return bitmapStore.totalByteSize.size
+        return ledger.bitmap.totalByteSize.size
     }
 
     override fun getUnallocatedSpace(): Long {
-        return bitmapStore.free.size.size
+        return ledger.bitmap.free.size.size
     }
 
     override fun getUsableSpace(): Long {
-        return bitmapStore.totalByteSize.size
+        return ledger.bitmap.totalByteSize.size
     }
 
     override fun isReadOnly(): Boolean {
-        return bitmapStore.isReadOnly()
+        return ledger.bitmap.isReadOnly()
     }
 
     override fun supportsFileAttributeView(type: Class<out FileAttributeView>): Boolean {

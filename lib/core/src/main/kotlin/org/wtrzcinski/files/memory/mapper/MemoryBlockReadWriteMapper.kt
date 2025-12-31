@@ -16,25 +16,26 @@
 
 package org.wtrzcinski.files.memory.mapper
 
-import org.wtrzcinski.files.memory.MemoryLedger
+import org.wtrzcinski.files.memory.MemorySegmentLedger
 import org.wtrzcinski.files.memory.address.Block
 import org.wtrzcinski.files.memory.address.BlockStart
 import org.wtrzcinski.files.memory.address.ByteSize
-import org.wtrzcinski.files.memory.buffer.MemoryByteBuffer
+import org.wtrzcinski.files.memory.buffer.chunk.ChunkReadWriteBuffer
+import org.wtrzcinski.files.memory.util.HistoricalLog
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
 class MemoryBlockReadWriteMapper(
-    val memory: MemoryLedger,
+    val memory: MemorySegmentLedger,
     override val start: Long,
     private val header: MemoryHeaderMapper,
-    val body: MemoryByteBuffer,
+    val body: ChunkReadWriteBuffer,
 ) : Block {
 
     companion object {
-        fun newBlock(memory: MemoryLedger, offset: BlockStart, bodySize: ByteSize): MemoryBlockReadWriteMapper {
+        fun newBlock(memory: MemorySegmentLedger, offset: BlockStart, bodySize: ByteSize): MemoryBlockReadWriteMapper {
             val header = MemoryHeaderMapper.newHeader(memory = memory, offset = offset, bodySize = bodySize)
-            val body = memory.directBuffer(start = offset + header.size, size = header.readBodySize())
+            val body = memory.directBuffer(start = offset + header.size, size = header.readBodySize)
             return MemoryBlockReadWriteMapper(
                 memory = memory,
                 start = offset.start,
@@ -43,9 +44,10 @@ class MemoryBlockReadWriteMapper(
             )
         }
 
-        fun existingBlock(memory: MemoryLedger, offset: BlockStart): MemoryBlockReadWriteMapper {
+        fun existingBlock(memory: MemorySegmentLedger, offset: BlockStart): MemoryBlockReadWriteMapper {
             val header = MemoryHeaderMapper.existingHeader(memory = memory, offset = offset)
-            val body = memory.directBuffer(start = offset + header.size, size = header.readBodySize())
+            val bodySize = header.readBodySize
+            val body = memory.directBuffer(start = offset + header.size, size = bodySize)
             return MemoryBlockReadWriteMapper(
                 memory = memory,
                 start = offset.start,
@@ -61,27 +63,32 @@ class MemoryBlockReadWriteMapper(
         }
 
     fun readBodySize(): ByteSize {
-        return header.readBodySize()
+        return header.readBodySize
     }
 
     fun readNextOffset(): BlockStart? {
-        return header.readNextOffset()
+        return header.readNextOffset
     }
 
-    fun writeBodySize(newValue: ByteSize) {
+    fun writeBodySizeAndTruncate(newValue: ByteSize) {
         val byteBuffer = header.bodySizeBuffer
         byteBuffer.clear()
         val prevValue = byteBuffer.readSize()
         if (prevValue != newValue) {
             val divide = this.div(newSize = newValue + memory.headerBytes)
+
+            HistoricalLog.debug(this) { "writeBodySizeAndTruncate ${divide.first}, ${divide.second}" }
+
             memory.release(block = divide.second)
 
             byteBuffer.clear()
             byteBuffer.writeSize(value = newValue)
+
+            body.limit(newValue)
         }
     }
 
-    fun writeNextOffset(newValue: BlockStart) {
+    fun writeNextOffsetAndRelease(newValue: BlockStart) {
         val byteBuffer = header.nextOffsetBuffer
         byteBuffer.clear()
         val prevValue = byteBuffer.readOffset()
@@ -100,6 +107,6 @@ class MemoryBlockReadWriteMapper(
         val next = readNextOffset()?.start
         val headerSize = memory.headerBytes
         val bodySize = readBodySize()
-        return "${javaClass.simpleName}(start=$start, end=$end, headerSize=$headerSize, bodySize=$bodySize, next=$next)"
+        return "${javaClass.simpleName}(start=$start, end=$end, size=$size, headerSize=$headerSize, bodySize=$bodySize, next=$next)"
     }
 }

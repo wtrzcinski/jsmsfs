@@ -14,56 +14,45 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.monkey
+package org.wtrzcinski.files
 
 import org.assertj.core.api.Assertions
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.wtrzcinski.files.Fixtures
-import org.wtrzcinski.files.memory.util.HistoricalLog
+import org.slf4j.LoggerFactory
+import org.wtrzcinski.files.memory.address.ByteSize
+import org.wtrzcinski.files.memory.path.FilePath.Companion.deleteRecursively
+import org.wtrzcinski.files.memory.path.HardFilePath
 import org.wtrzcinski.files.memory.provider.MemoryFileStore
 import org.wtrzcinski.files.memory.provider.MemoryFileSystemProvider
-import org.wtrzcinski.files.memory.address.ByteSize
 import java.net.URI
-import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.StandardOpenOption
 import java.util.concurrent.TimeUnit
 
 @Suppress("MayBeConstant")
 internal class MonkeyTest {
+
     companion object {
-        val megabytes: Int = 4
+        private val log = LoggerFactory.getLogger(MonkeyTest::class.java)
+
+        val capacity: Int = 4
         val blockSize: Int = 256
         val minStringSize: Int = blockSize
         val maxStringSize: Int = blockSize * 2
-        val repeats: Int = 5_000
+        val repeats: Int = 10_000
+
+        private val registry = Registry()
 
         init {
             MemoryFileSystemProvider.newFileSystem(
                 uri = URI.create("jsmsfs:///"),
-                env = mapOf("scope" to "SHARED", "capacity" to "${megabytes}MB", "blockSize" to blockSize)
+                env = mapOf("scope" to "SHARED", "capacity" to "${capacity}MB", "blockSize" to blockSize)
             )
-        }
-
-        private fun createRandomRegularFile(parent: Path): Path {
-            val childName = Fixtures.newAlphanumericString(lengthFrom = minStringSize, lengthUntil = maxStringSize)
-            val childContent = Fixtures.newAlphanumericString(lengthFrom = minStringSize, lengthUntil = maxStringSize)
-            val child = parent.resolve(childName)
-            val createFile = Files.createFile(child)
-            Files.writeString(createFile, childContent, StandardOpenOption.WRITE)
-            Assertions.assertThat(Files.exists(createFile)).isTrue()
-            return child
-        }
-
-        private fun createRandomDirectory(parent: Path): Path {
-            val childName = Fixtures.newAlphanumericString(lengthFrom = minStringSize, lengthUntil = maxStringSize)
-            val child = parent.resolve(childName)
-            val createDirectory = Files.createDirectory(child)
-            Assertions.assertThat(Files.exists(createDirectory)).isTrue()
-            return createDirectory
+            val root = Path.of(URI.create("jsmsfs:///"))
+            require(root is HardFilePath)
+            registry.addDirectory(root)
         }
     }
 
@@ -80,10 +69,8 @@ internal class MonkeyTest {
     @AfterEach
     fun afterEach() {
         val parent = Path.of(URI.create("jsmsfs:///"))
-        val list = Files.list(parent)
-        for (child in list) {
-            Files.delete(child)
-        }
+        parent.deleteRecursively()
+
         val fileStore = parent.fileSystem.fileStores.first() as MemoryFileStore
         val used = ByteSize(fileStore.totalSpace - fileStore.unallocatedSpace)
         Assertions.assertThat(fileStore.used).isEqualTo(used)
@@ -91,24 +78,24 @@ internal class MonkeyTest {
     }
 
     @Test
-    @Timeout(value = 1, unit = TimeUnit.MINUTES)
+    @Timeout(value = 10, unit = TimeUnit.MINUTES)
     fun `should create random files`() {
-        val parent = Path.of(URI.create("jsmsfs:///"))
-        val fileStore = parent.fileSystem.fileStores.first() as MemoryFileStore
+        val root = Path.of(URI.create("jsmsfs:///"))
+        val fileStore = root.fileSystem.fileStores.first() as MemoryFileStore
 
         repeat(repeats) {
             if (fileStore.reservedSpaceFactor <= 0.9) {
-                createRandomRegularFile(parent = parent)
+                registry.createRandom()
             } else {
-                val list = Files.list(parent).toList()
-                val randomChild = list.random()
-                Files.delete(randomChild)
+                registry.deleteRandom()
             }
+            registry.checkRandomFile()
+//            registry.checkRandomLink()
         }
 
-        HistoricalLog.debug({ fileStore.reservedCount })
-        HistoricalLog.debug({ fileStore.reservedSpaceFactor })
-        HistoricalLog.debug({ fileStore.metadataSpaceFactor })
-        HistoricalLog.debug({ fileStore.wastedSpaceFactor })
+        log.info("{}", fileStore.reservedCount)
+        log.info("{}", fileStore.reservedSpaceFactor)
+        log.info("{}", fileStore.metadataSpaceFactor)
+        log.info("{}", fileStore.wastedSpaceFactor)
     }
 }

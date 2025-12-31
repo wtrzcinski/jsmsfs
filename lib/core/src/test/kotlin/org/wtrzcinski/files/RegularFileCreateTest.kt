@@ -44,6 +44,9 @@ class RegularFileCreateTest {
 
         val fileStore = parent.fileSystem.fileStores.first() as MemoryFileStore
         val used = ByteSize(fileStore.totalSpace - fileStore.unallocatedSpace)
+
+        fileStore.ledger.bitmap.reserved
+
         assertThat(fileStore.used).isEqualTo(used)
         assertThat(used).isEqualTo(ByteSize(102))
     }

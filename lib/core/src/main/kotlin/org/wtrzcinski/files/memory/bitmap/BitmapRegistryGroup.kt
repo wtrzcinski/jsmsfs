@@ -19,45 +19,39 @@ package org.wtrzcinski.files.memory.bitmap
 import org.wtrzcinski.files.memory.address.Block
 import org.wtrzcinski.files.memory.address.BlockStart
 import org.wtrzcinski.files.memory.address.ByteSize
-import org.wtrzcinski.files.memory.buffer.MemoryOpenOptions.Companion.WRITE
-import org.wtrzcinski.files.memory.lock.MemoryFileLock
 import org.wtrzcinski.files.memory.lock.MemoryFileLock.Companion.use
 import org.wtrzcinski.files.memory.lock.MemoryLockRegistry
-import org.wtrzcinski.files.memory.lock.ReadWriteMemoryFileLock
-import org.wtrzcinski.files.memory.util.Preconditions.assertTrue
-import kotlin.concurrent.atomics.AtomicInt
+import org.wtrzcinski.files.memory.mode.AbstractCloseable
+import org.wtrzcinski.files.memory.mode.Mode
+import org.wtrzcinski.files.memory.util.Check
+import org.wtrzcinski.files.memory.util.Require
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
 class BitmapRegistryGroup(
-    memoryOffset: Long,
-    val totalByteSize: ByteSize,
-    private val readOnly: Boolean,
-    private val lockRegistry: MemoryLockRegistry,
-) : BitmapRegistry {
+    offset: Long,
+    mode: Mode = Mode.readWrite(),
+    override val totalByteSize: ByteSize,
+    private val locks: MemoryLockRegistry,
+) : BitmapRegistry, Block, AbstractCloseable(mode = mode) {
 
     override val free: BitmapFreeBlocks = BitmapFreeBlocks()
 
     override val reserved: BitmapReservedBlocks = BitmapReservedBlocks()
 
+    override val start: Long = offset
+
+    override val size: Long = totalByteSize.size
+
     init {
-        free.add(BitmapEntry(start = memoryOffset, size = totalByteSize.size))
+        free.add(BitmapEntry(start = offset, size = totalByteSize.size))
     }
 
-    override fun isReadOnly(): Boolean {
-        return readOnly
-    }
+    override fun allocate(name: String, minBlockSize: ByteSize, maxBlockSize: ByteSize, prev: BlockStart): BitmapEntry {
+        Check.isTrue { minBlockSize <= maxBlockSize }
+        Check.isTrue { isWritable() }
 
-    override fun allocate(
-        minBlockSize: ByteSize,
-        maxBlockSize: ByteSize,
-        prev: BlockStart,
-    ): BitmapEntry {
-        assertTrue(!isReadOnly())
-        assertTrue(minBlockSize <= maxBlockSize)
-
-        val lock = lockRegistry.newLock(mode = WRITE)
-
+        val lock = locks.bitmapLock
         lock.use {
             var result = free.findBySize(minByteSize = minBlockSize, maxByteSize = maxBlockSize)
             free.remove(result)
@@ -66,61 +60,39 @@ class BitmapRegistryGroup(
                 free.add(divide.second)
                 result = divide.first
             }
-            val withPrev = BitmapEntry(start = result.start, size = result.size, prev = prev)
-            reserved.add(withPrev)
+            reserved.add(result)
 
-            val sum = reserved.byteSize + free.size
-            require(totalByteSize == sum) { "$totalByteSize != $sum" }
-
-            return withPrev
+            Check.isTrue {
+                val sum = this.reserved.size + this.free.size
+                totalByteSize == sum
+            }
+            return result
         }
     }
 
     override fun release(block: Block) {
-        assertTrue(!isReadOnly())
+        Check.isTrue { isWritable() }
 
-        val lock = lockRegistry.newLock(mode = WRITE)
-
+        val lock = locks.bitmapLock
         lock.use {
-            val reserved = reserved.copy()
+            val segment = reserved.byEndOffset[block.end]
+            if (segment != null) {
+                val subtract = segment.minus(block)
 
-            val addToFree = mutableListOf<Block>()
-            val addToReserved = mutableListOf<BitmapEntry>()
-            val removeFromReserved = mutableListOf<BitmapEntry>()
-            for (segment in reserved) {
-                if (segment.start == block.start) {
-                    require(segment.size == block.size)
+                this.reserved.remove(segment)
+                this.free.add(block)
 
-                    removeFromReserved.add(segment)
-                    addToFree.add(segment)
-                } else if (segment.contains(block)) {
-                    val subtract = segment.minus(block)
-
-                    removeFromReserved.add(segment)
-                    addToReserved.add(subtract)
-                    addToFree.add(block)
+                if (!subtract.isEmpty()) {
+                    this.reserved.add(subtract)
                 }
-            }
-            for (segment in reserved) {
-                if (addToFree.any { it.start == segment.prev.start }) {
-                    removeFromReserved.add(segment)
-                    addToFree.add(segment)
-                }
+            } else {
+                Require.unsupported()
             }
 
-            for (it in removeFromReserved) {
-                this.reserved.remove(it)
+            Check.isTrue {
+                val sum = this.reserved.size + this.free.size
+                totalByteSize == sum
             }
-
-            for (it in addToReserved) {
-                this.reserved.add(it)
-            }
-
-            for (it in addToFree) {
-                free.add(it)
-            }
-
-            require(totalByteSize == this.reserved.byteSize + this.free.size)
         }
     }
 }

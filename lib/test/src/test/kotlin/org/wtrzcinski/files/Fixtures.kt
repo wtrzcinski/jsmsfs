@@ -14,18 +14,21 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.node.attribute
+package org.wtrzcinski.files
 
-import java.nio.file.attribute.PosixFilePermission
-import java.nio.file.attribute.PosixFilePermissions
-import java.time.Instant
+import kotlin.random.Random
 
-class AttributesBlock(
-    val now: Instant = Instant.ofEpochSecond(0, 0),
-    val lastAccessTime: Instant = now,
-    val lastModifiedTime: Instant = now,
-    val creationTime: Instant = now,
-    val permissions: Set<PosixFilePermission> = PosixFilePermissions.fromString("rwx".repeat(3)),
-    val owner: String = "",
-    val group: String = "",
-)
+object Fixtures {
+
+    private val alphanumeric: List<Char> = ('a'..'z') + ('A'..'Z') + ('0'..'9')
+
+    fun newAlphanumericString(lengthFrom: Int = 1, lengthUntil: Int): String {
+        require(lengthFrom < lengthUntil)
+
+        val length: Int = Random.nextInt(lengthFrom, lengthUntil)
+        val chars: List<Char> = (0..<length)
+            .map { Random.nextInt(alphanumeric.size) }
+            .map { alphanumeric[it] }
+        return chars.joinToString("")
+    }
+}

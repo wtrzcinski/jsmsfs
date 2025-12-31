@@ -16,59 +16,61 @@
 
 package org.wtrzcinski.files.memory.mapper
 
-import org.wtrzcinski.files.memory.MemoryLedger
+import org.wtrzcinski.files.memory.MemorySegmentLedger
 import org.wtrzcinski.files.memory.address.BlockStart
 import org.wtrzcinski.files.memory.buffer.channel.FragmentedReadWriteBuffer
 import org.wtrzcinski.files.memory.exception.MemoryIllegalStateException
 import org.wtrzcinski.files.memory.mapper.MemoryMapperRegistry.Companion.intByteSize
+import org.wtrzcinski.files.memory.mode.AbstractCloseable
+import org.wtrzcinski.files.memory.mode.Mode
 import org.wtrzcinski.files.memory.node.NodeType
-import org.wtrzcinski.files.memory.util.AbstractCloseable
+import org.wtrzcinski.files.memory.util.Check.isTrue
 
-internal class NodeMapper(
-    memory: MemoryLedger,
-) : BlockBodyMapper, AbstractCloseable() {
+class NodeMapper(
+    name: String,
+    memory: MemorySegmentLedger,
+    mode: Mode,
+) : BlockBodyMapper, AbstractCloseable(mode) {
 
-    private val size = intByteSize + (memory.offsetBytes * 3)
     private val dataPosition: Long = intByteSize.size
     private val attrPosition: Long = intByteSize.size + memory.offsetBytes.toLong()
     private val namePosition: Long = intByteSize.size + (memory.offsetBytes.toLong() * 2)
+    private val bodySize = intByteSize + (memory.offsetBytes * 3)
 
-    private val buffer: FragmentedReadWriteBuffer
-
-    init {
-        buffer = memory.newByteChannel(bodySize = size)
-    }
+    private val buffer: FragmentedReadWriteBuffer = memory.newBuffer(name = name, bodyAlignment = bodySize)
 
     fun writeType(type: NodeType) {
-        require(buffer.position() == 0L)
+        checkIsWritable()
+        isTrue { buffer.position() == 0L }
 
         buffer.writeInt(type.ordinal)
     }
 
     fun writeDataOffset(offset: BlockStart) {
-        require(buffer.position() == dataPosition)
+        isTrue { buffer.position() == dataPosition }
 
         buffer.writeOffset(offset)
     }
 
     fun writeAttrOffset(offset: BlockStart) {
-        require(buffer.position() == attrPosition)
+        isTrue { buffer.position() == attrPosition }
 
         buffer.writeOffset(offset)
     }
 
     fun writeNameOffset(offset: BlockStart) {
-        require(buffer.position() == namePosition)
+        isTrue { buffer.position() == namePosition }
 
         buffer.writeOffset(offset)
     }
 
     override fun flip(): BlockStart {
-        if (tryClose()) {
-            require(buffer.position() == size.size)
-            buffer.close()
-            return buffer.first()
+        if (tryFlip()) {
+            isTrue { buffer.position() == bodySize.size }
+
+            return buffer.flip()
+        } else {
+            throw MemoryIllegalStateException()
         }
-        throw MemoryIllegalStateException()
     }
 }

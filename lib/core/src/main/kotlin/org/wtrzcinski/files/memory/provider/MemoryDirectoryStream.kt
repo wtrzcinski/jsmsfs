@@ -14,22 +14,24 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.node.directory
+package org.wtrzcinski.files.memory.provider
 
 import org.wtrzcinski.files.memory.node.DirectoryNode
-import org.wtrzcinski.files.memory.node.MemoryPath
+import org.wtrzcinski.files.memory.path.HardFilePath
 import java.nio.file.DirectoryStream
 import java.nio.file.Path
 
 internal class MemoryDirectoryStream(
-    val path: MemoryPath,
+    val path: HardFilePath,
     val filter: DirectoryStream.Filter<in Path>,
 ) : DirectoryStream<Path> {
-    override fun iterator(): MutableIterator<MemoryPath> {
+
+    override fun iterator(): MutableIterator<Path> {
         val node = path.node
         require(node is DirectoryNode)
 
-        val actualFileSystem = path.fileSystem.provider().fileSystem
+        val provider1 = path.fileSystem.provider() as MemoryFileSystemProvider
+        val actualFileSystem = provider1.fileSystem
         requireNotNull(actualFileSystem)
 
         val children = actualFileSystem.findChildren(node)
@@ -37,10 +39,10 @@ internal class MemoryDirectoryStream(
         val filter = map.filter { filter.accept(it) }
         val iterator = filter.iterator()
 
-        return object : MutableIterator<MemoryPath> {
-            private lateinit var current: MemoryPath
+        return object : MutableIterator<Path> {
+            private lateinit var current: Path
 
-            override fun next(): MemoryPath {
+            override fun next(): Path {
                 val next = iterator.next()
                 current = next
                 return next
@@ -51,8 +53,7 @@ internal class MemoryDirectoryStream(
             }
 
             override fun remove() {
-                val provider = current.fileSystem.provider()
-                provider.delete(current)
+                provider1.delete(current)
             }
         }
     }

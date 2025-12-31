@@ -14,13 +14,15 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.node.attribute
+package org.wtrzcinski.files.memory.provider
 
 import org.wtrzcinski.files.memory.MemorySegmentFileSystem
+import org.wtrzcinski.files.memory.node.AttributesBlock
 import org.wtrzcinski.files.memory.node.NodeType
 import org.wtrzcinski.files.memory.node.ValidNode
 import java.nio.file.attribute.*
 
+// todo wojtek make it lazy
 internal class MemoryFileAttributes(
     val fileSystem: MemorySegmentFileSystem,
     val name: String,

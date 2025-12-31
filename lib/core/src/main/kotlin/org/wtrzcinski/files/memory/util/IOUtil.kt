@@ -14,34 +14,26 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.lock
+package org.wtrzcinski.files.memory.util
 
-import org.wtrzcinski.files.memory.provider.MemoryFileOpenOptions
+import java.nio.ByteBuffer.allocate
+import java.nio.channels.ReadableByteChannel
+import java.nio.channels.WritableByteChannel
 
-data class MemoryFileLock(
-    val mode: MemoryFileOpenOptions,
-    private val lock: ReadWriteMemoryFileLock,
-) {
-    companion object {
-        inline fun <T> MemoryFileLock.use(block: () -> T): T {
-            try {
-                acquire()
-                return block.invoke()
-            } finally {
-                release()
+object IOUtil {
+
+    fun transfer(sourceByteBuffer: ReadableByteChannel, targetByteBuffer: WritableByteChannel): Int {
+        var result = 0
+        val buffer = allocate(1024 * 4)
+        while (true) {
+            buffer.clear()
+            val length = sourceByteBuffer.read(buffer)
+            if (length < 0) {
+                return result
             }
+            result += length
+            buffer.flip()
+            targetByteBuffer.write(buffer)
         }
-    }
-
-    fun refCount(): Int {
-        return lock.refCount()
-    }
-
-    fun acquire() {
-        lock.acquire(mode)
-    }
-
-    fun release() {
-        lock.release(mode)
     }
 }

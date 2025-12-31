@@ -32,13 +32,15 @@ data class ByteSize(
             if (any == null) {
                 return null
             } else if (any is ByteArray) {
-                return readSize(String(any).trim())
+                val toString = String(any).trim()
+                return readSize(toString)
+            } else {
+                val toString = any.toString().lowercase()
+                return readSize(toString)
             }
-            val toString = any.toString().lowercase()
-            return readSize(toString)
         }
 
-        private fun readSize(toString: String): ByteSize {
+        fun readSize(toString: String): ByteSize {
             try {
                 return ByteSize(value = toString.toLong(), shift = ByteSizeShift.noop)
             } catch (_: NumberFormatException) {
@@ -67,7 +69,7 @@ data class ByteSize(
         }
     }
 
-    constructor(size: Int) : this(value = size.toLong())
+    constructor(value: Int) : this(value = value.toLong())
 
     val size: Long = shift.convert(value)
 

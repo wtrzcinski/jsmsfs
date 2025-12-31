@@ -17,18 +17,19 @@
 package org.wtrzcinski.files.memory.node
 
 import org.wtrzcinski.files.memory.address.BlockStart
+import org.wtrzcinski.files.memory.address.DefaultBlockStart
 
-internal class RegularFileNode(
+class RegularFileNode(
     name: String,
     nodeRef: BlockStart,
     dataRef: BlockStart = BlockStart.InvalidAddress,
     attrRef: BlockStart = BlockStart.InvalidAddress,
     nameRef: BlockStart = BlockStart.InvalidAddress,
 ) : ValidNode(
-    offset = nodeRef,
+    offset = DefaultBlockStart(nodeRef),
     fileType = NodeType.Regular,
-    dataRef = dataRef,
-    attrsRef = attrRef,
-    nameRef = nameRef,
+    dataRef = DefaultBlockStart(dataRef),
+    attrsRef = DefaultBlockStart(attrRef),
+    nameRef = DefaultBlockStart(nameRef),
     name = name,
 )

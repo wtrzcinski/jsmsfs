@@ -17,26 +17,25 @@
 package org.wtrzcinski.files.memory.bitmap
 
 import org.wtrzcinski.files.memory.address.Block
-import org.wtrzcinski.files.memory.address.BlockStart
 import org.wtrzcinski.files.memory.address.ByteSize
 import org.wtrzcinski.files.memory.address.DefaultBlock
 
 class BitmapEntry(
     start: Long,
     size: Long,
-    val prev: BlockStart = BlockStart.InvalidAddress,
 ) : DefaultBlock(
     start = start,
     size = size,
     end = start + size
 ) {
 
+    constructor(block: Block): this(start = block.start, size = block.size)
+
     override operator fun minus(other: Block): BitmapEntry {
         val subtract = super.minus(other)
         return BitmapEntry(
             start = subtract.start,
             size = subtract.size,
-            prev = this.prev,
         )
     }
 
@@ -45,12 +44,10 @@ class BitmapEntry(
         val first = BitmapEntry(
             start = divide.first.start,
             size = divide.first.size,
-            prev = this.prev,
         )
         val second = BitmapEntry(
             start = divide.second.start,
             size = divide.second.size,
-            prev = divide.first,
         )
         return first to second
     }
@@ -60,15 +57,10 @@ class BitmapEntry(
         return BitmapEntry(
             start = join.start,
             size = join.size,
-            prev = this.prev,
         )
     }
 
-    fun isFirst(): Boolean {
-        return !prev.isValid()
-    }
-
     override fun toString(): String {
-        return "${javaClass.simpleName}(start=$start, end=$end, size=$size, prev=$prev)"
+        return "${javaClass.simpleName}(start=$start, end=$end, size=$size)"
     }
 }

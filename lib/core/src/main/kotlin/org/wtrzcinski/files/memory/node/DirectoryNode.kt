@@ -17,18 +17,19 @@
 package org.wtrzcinski.files.memory.node
 
 import org.wtrzcinski.files.memory.address.BlockStart
+import org.wtrzcinski.files.memory.address.DefaultBlockStart
 
-internal class DirectoryNode(
+class DirectoryNode(
     name: String,
     nodeRef: BlockStart,
     dataRef: BlockStart = BlockStart.InvalidAddress,
     attrRef: BlockStart = BlockStart.InvalidAddress,
     nameRef: BlockStart = BlockStart.InvalidAddress,
 ) : ValidNode(
-    offset = nodeRef,
+    offset = DefaultBlockStart(nodeRef),
     fileType = NodeType.Directory,
-    dataRef = dataRef,
-    attrsRef = attrRef,
-    nameRef = nameRef,
+    dataRef = DefaultBlockStart(dataRef),
+    attrsRef = DefaultBlockStart(attrRef),
+    nameRef = DefaultBlockStart(nameRef),
     name = name,
 )

@@ -20,21 +20,35 @@ import org.wtrzcinski.files.memory.address.Block
 import org.wtrzcinski.files.memory.address.BlockStart
 import org.wtrzcinski.files.memory.address.ByteSize
 import org.wtrzcinski.files.memory.lock.MemoryLockRegistry
+import org.wtrzcinski.files.memory.mode.Mode
 
 interface BitmapRegistry {
+
+    val totalByteSize: ByteSize
+
     val reserved: BitmapReservedBlocks
 
     val free: BitmapFreeBlocks
 
     fun isReadOnly(): Boolean
 
-    fun allocate(minBlockSize: ByteSize, maxBlockSize: ByteSize, prev: BlockStart): BitmapEntry
+    fun allocate(name: String, minBlockSize: ByteSize, maxBlockSize: ByteSize, prev: BlockStart): BitmapEntry
 
     fun release(block: Block)
 
     companion object {
-        operator fun invoke(memoryOffset: Long, memorySize: ByteSize, readOnly: Boolean, lockRegistry: MemoryLockRegistry): BitmapRegistryGroup {
-            return BitmapRegistryGroup(memoryOffset = memoryOffset, totalByteSize = memorySize, readOnly = readOnly, lockRegistry = lockRegistry)
+        operator fun invoke(
+            memoryOffset: Long,
+            memorySize: ByteSize,
+            readOnly: Boolean,
+            lockRegistry: MemoryLockRegistry
+        ): BitmapRegistryGroup {
+            return BitmapRegistryGroup(
+                offset = memoryOffset,
+                totalByteSize = memorySize,
+                locks = lockRegistry,
+                mode = Mode.of(readOnly),
+            )
         }
     }
 }

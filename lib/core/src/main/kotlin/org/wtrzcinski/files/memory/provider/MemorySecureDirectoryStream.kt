@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.node.directory
+package org.wtrzcinski.files.memory.provider
 
-import org.wtrzcinski.files.memory.node.MemoryPath
+import org.wtrzcinski.files.memory.path.HardFilePath
 import java.nio.channels.SeekableByteChannel
 import java.nio.file.*
 import java.nio.file.attribute.FileAttribute
 import java.nio.file.attribute.FileAttributeView
 
 internal class MemorySecureDirectoryStream(
-    private val parent: MemoryPath,
+    private val parent: HardFilePath,
     private val filter: DirectoryStream.Filter<in Path>,
     private val delegate: DirectoryStream<Path> = MemoryDirectoryStream(parent, filter),
 ) : DirectoryStream<Path> by delegate, SecureDirectoryStream<Path> {
@@ -39,6 +39,7 @@ internal class MemorySecureDirectoryStream(
     override fun deleteFile(path: Path) {
         val absolutePath = parent.resolve(path)
         require(filter.accept(absolutePath))
+
         val provider = parent.fileSystem.provider()
         provider.delete(absolutePath)
     }
@@ -46,6 +47,7 @@ internal class MemorySecureDirectoryStream(
     override fun deleteDirectory(path: Path) {
         val absolutePath = parent.resolve(path)
         require(filter.accept(absolutePath))
+
         val provider = parent.fileSystem.provider()
         provider.delete(absolutePath)
     }

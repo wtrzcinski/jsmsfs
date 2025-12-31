@@ -17,10 +17,10 @@
 package org.wtrzcinski.files.memory.node
 
 enum class NodeType {
-    Regular,
-    Directory,
-    SymbolicLink,
-    Unknown,
-    Refs,
-    String,
+    Regular, // Bytes, Attrs, Name
+    Directory, // Children Refs, Attrs, Name
+    SymbolicLink, // Target Symbolic Name, Attrs, Name
+    Refs, // Refs
+    String, // 4 bytes for length + bytes
+    Bytes, // anything
 }

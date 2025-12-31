@@ -29,9 +29,9 @@ import org.wtrzcinski.files.Fixtures.newRandomPath
 import org.wtrzcinski.files.Fixtures.newUniqueString
 import org.wtrzcinski.files.arguments.PathProvider
 import org.wtrzcinski.files.arguments.TestArgumentsProvider
-import org.wtrzcinski.files.memory.util.HistoricalLog
-import org.wtrzcinski.files.memory.provider.MemoryFileStore
 import org.wtrzcinski.files.memory.address.ByteSize
+import org.wtrzcinski.files.memory.provider.MemoryFileStore
+import org.wtrzcinski.files.memory.util.HistoricalLog
 import java.nio.file.Files
 import java.nio.file.StandardOpenOption.APPEND
 import java.nio.file.StandardOpenOption.CREATE
@@ -86,12 +86,12 @@ class PerformanceTest {
             }
         }
 
-        HistoricalLog.debug { "upsert: $duration $pathProvider" }
+        HistoricalLog.debug(this) { "upsert: $duration $pathProvider" }
     }
 
     @Test
     fun `should read in loop`() {
-        val all = (0..<1).map { _ ->
+        val all = (0..<repeats).map { _ ->
             val givenFileName = pathProvider.getPath(newUniqueString())
             val givenFileContent = newAlphanumericString(lengthUntil = 512)
             Files.write(givenFileName, listOf(givenFileContent), UTF_8)
@@ -106,7 +106,7 @@ class PerformanceTest {
                 assertThat(actual).contains(givenFileContent)
             }
         }
-        HistoricalLog.debug { "read: $duration $pathProvider" }
+        HistoricalLog.debug(this) { "read: $duration $pathProvider" }
     }
 
     @Test
@@ -129,7 +129,7 @@ class PerformanceTest {
                     assertThat(actual).isFalse()
                 }
         }
-        HistoricalLog.debug { "delete $duration $pathProvider" }
+        HistoricalLog.debug(this) { "delete $duration $pathProvider" }
     }
 
     @Test
@@ -164,12 +164,12 @@ class PerformanceTest {
         val givenFilePath = pathProvider.newRandomPath()
 
         val fileSystem = pathProvider.fileSystem()
-        HistoricalLog.debug { fileSystem }
+        HistoricalLog.debug(this) { fileSystem }
 
         val pool = Executors.newWorkStealingPool()
         val futures = CopyOnWriteArrayList<Future<*>>()
         repeat(threads) {
-            val submit: Future<*> = pool.submit {
+            futures.add(pool.submit {
                 repeat(repeats) {
                     val givenFileContent = newAlphanumericString(lengthFrom = 1, lengthUntil = 256)
 
@@ -178,8 +178,7 @@ class PerformanceTest {
                     val actual = Files.readString(givenFilePath)
                     assertThat(actual).contains(givenFileContent)
                 }
-            }
-            futures.add(submit)
+            })
         }
 
         for (future in futures) {

@@ -36,7 +36,6 @@ class TestArgumentsProvider : ArgumentsProvider {
         val memoryFileSystems = MemoryScopeType
             .entries
             .filter { it != MemoryScopeType.CONFINED }
-            .filter { it == MemoryScopeType.HEAP }
             .map {
                 if (it == MemoryScopeType.PATH) {
                     Arguments.argumentSet(

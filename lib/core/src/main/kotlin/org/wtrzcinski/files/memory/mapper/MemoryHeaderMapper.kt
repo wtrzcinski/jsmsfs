@@ -16,23 +16,23 @@
 
 package org.wtrzcinski.files.memory.mapper
 
-import org.wtrzcinski.files.memory.MemoryLedger
+import org.wtrzcinski.files.memory.MemorySegmentLedger
 import org.wtrzcinski.files.memory.address.Block
 import org.wtrzcinski.files.memory.address.BlockStart
 import org.wtrzcinski.files.memory.address.ByteSize
-import org.wtrzcinski.files.memory.buffer.MemoryByteBuffer
+import org.wtrzcinski.files.memory.buffer.chunk.ChunkReadWriteBuffer
 
 class MemoryHeaderMapper(
-    val memory: MemoryLedger,
+    val memory: MemorySegmentLedger,
     val offset: BlockStart,
-    val bodySizeBuffer: MemoryByteBuffer,
-    val nextOffsetBuffer: MemoryByteBuffer,
-) : DataMapper, Block {
+    val bodySizeBuffer: ChunkReadWriteBuffer,
+    val nextOffsetBuffer: ChunkReadWriteBuffer,
+) : Mapper, Block {
     companion object {
-        fun newHeader(memory: MemoryLedger, offset: BlockStart, bodySize: ByteSize): MemoryHeaderMapper {
-            val bodySizeBuffer: MemoryByteBuffer = bodySizeBuffer(memory, offset)
+        fun newHeader(memory: MemorySegmentLedger, offset: BlockStart, bodySize: ByteSize): MemoryHeaderMapper {
+            val bodySizeBuffer: ChunkReadWriteBuffer = bodySizeBuffer(memory, offset)
             bodySizeBuffer.writeSize(value = bodySize)
-            val nextOffsetBuffer: MemoryByteBuffer = nextOffsetBuffer(memory, offset)
+            val nextOffsetBuffer: ChunkReadWriteBuffer = nextOffsetBuffer(memory, offset)
             nextOffsetBuffer.writeOffset(value = BlockStart.InvalidAddress)
             return MemoryHeaderMapper(
                 memory = memory,
@@ -42,9 +42,9 @@ class MemoryHeaderMapper(
             )
         }
 
-        fun existingHeader(memory: MemoryLedger, offset: BlockStart): MemoryHeaderMapper {
-            val bodySizeBuffer: MemoryByteBuffer = bodySizeBuffer(memory, offset)
-            val nextOffsetBuffer: MemoryByteBuffer = nextOffsetBuffer(memory, offset)
+        fun existingHeader(memory: MemorySegmentLedger, offset: BlockStart): MemoryHeaderMapper {
+            val bodySizeBuffer: ChunkReadWriteBuffer = bodySizeBuffer(memory, offset)
+            val nextOffsetBuffer: ChunkReadWriteBuffer = nextOffsetBuffer(memory, offset)
             return MemoryHeaderMapper(
                 memory = memory,
                 offset = offset,
@@ -53,14 +53,14 @@ class MemoryHeaderMapper(
             )
         }
 
-        private fun bodySizeBuffer(dataRegistry: MemoryLedger, offset: BlockStart): MemoryByteBuffer {
+        private fun bodySizeBuffer(dataRegistry: MemorySegmentLedger, offset: BlockStart): ChunkReadWriteBuffer {
             return dataRegistry.directBuffer(
                 start = offset,
                 size = dataRegistry.sizeBytes,
             )
         }
 
-        private fun nextOffsetBuffer(dataRegistry: MemoryLedger, offset: BlockStart): MemoryByteBuffer {
+        private fun nextOffsetBuffer(dataRegistry: MemorySegmentLedger, offset: BlockStart): ChunkReadWriteBuffer {
             return dataRegistry.directBuffer(
                 start = offset + dataRegistry.sizeBytes,
                 size = dataRegistry.offsetBytes,
@@ -78,21 +78,23 @@ class MemoryHeaderMapper(
             return memory.headerBytes.size
         }
 
-    fun readBodySize(): ByteSize {
-        val byteBuffer = bodySizeBuffer
-        byteBuffer.clear()
-        return byteBuffer.readSize()
-    }
-
-    fun readNextOffset(): BlockStart? {
-        val byteBuffer = nextOffsetBuffer
-        byteBuffer.clear()
-        val nextRef = byteBuffer.readOffset()
-        if (nextRef != null && nextRef.isValid()) {
-            return nextRef
+    val readBodySize: ByteSize
+        get() {
+            val byteBuffer = bodySizeBuffer
+            byteBuffer.clear()
+            return byteBuffer.readSize()
         }
-        return null
-    }
+
+    val readNextOffset: BlockStart?
+        get() {
+            val byteBuffer = nextOffsetBuffer
+            byteBuffer.clear()
+            val nextRef = byteBuffer.readOffset()
+            if (nextRef != null && nextRef.isValid()) {
+                return nextRef
+            }
+            return null
+        }
 
     override fun flip(): BlockStart {
         return offset

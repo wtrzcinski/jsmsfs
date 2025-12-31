@@ -17,62 +17,45 @@
 package org.wtrzcinski.files.memory
 
 import org.wtrzcinski.files.memory.address.BlockStart
-import org.wtrzcinski.files.memory.address.ByteSize
-import org.wtrzcinski.files.memory.allocator.MemoryScopeType
-import org.wtrzcinski.files.memory.allocator.MemorySegmentFactory
-import org.wtrzcinski.files.memory.bitmap.BitmapRegistry
-import org.wtrzcinski.files.memory.bitmap.BitmapRegistryGroup
-import org.wtrzcinski.files.memory.buffer.MemoryOpenOptions
-import org.wtrzcinski.files.memory.buffer.MemoryOpenOptions.Companion.READ
-import org.wtrzcinski.files.memory.buffer.MemoryOpenOptions.Companion.WRITE
 import org.wtrzcinski.files.memory.buffer.channel.FragmentedReadWriteBuffer
 import org.wtrzcinski.files.memory.exception.MemoryIllegalArgumentException
-import org.wtrzcinski.files.memory.exception.MemoryIllegalFileNameException
 import org.wtrzcinski.files.memory.lock.MemoryFileLock.Companion.use
-import org.wtrzcinski.files.memory.lock.MemoryLockRegistry
-import org.wtrzcinski.files.memory.mapper.MemoryMapperRegistry
 import org.wtrzcinski.files.memory.mapper.MemoryMapperRegistry.Companion.intByteSize
+import org.wtrzcinski.files.memory.mode.AbstractCloseable
+import org.wtrzcinski.files.memory.mode.Mode
 import org.wtrzcinski.files.memory.node.*
-import org.wtrzcinski.files.memory.node.attribute.AttributesBlock
-import org.wtrzcinski.files.memory.util.AbstractCloseable
+import org.wtrzcinski.files.memory.provider.MemoryFileOpenOptions
+import org.wtrzcinski.files.memory.provider.MemoryFileOpenOptions.Companion.READ
+import org.wtrzcinski.files.memory.provider.MemoryFileOpenOptions.Companion.WRITE_TRUNCATE
+import org.wtrzcinski.files.memory.util.Check
+import org.wtrzcinski.files.memory.util.Require
 import java.io.File
-import java.lang.foreign.MemorySegment
 import java.nio.file.DirectoryNotEmptyException
 import java.nio.file.FileAlreadyExistsException
 import java.nio.file.NoSuchFileException
 import java.nio.file.attribute.PosixFilePermissions
 import java.nio.file.attribute.PosixFilePermissions.toString
-import java.time.Instant
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.reflect.KClass
 import kotlin.reflect.cast
 import kotlin.reflect.full.isSuperclassOf
 
 @OptIn(ExperimentalAtomicApi::class)
-internal class MemorySegmentFileSystem(
-    scope: MemoryScopeType,
-    val byteSize: ByteSize,
-    blockSize: ByteSize,
-    val name: String = "",
-    env: Map<String, Any?> = mapOf(),
-) : AutoCloseable, AbstractCloseable() {
+@Suppress("unused")
+class MemorySegmentFileSystem(
+    val context: MemorySegmentContext,
+    name: String = "",
+) : AutoCloseable, AbstractCloseable(
+    mode = Mode.of(readOnly = context.ledger.memory.isReadOnly())
+) {
 
-    val lockRegistry = MemoryLockRegistry()
-
-    val memoryFactory: MemorySegmentFactory = scope.createFactory(env)
-
-    val memorySegment: MemorySegment = memoryFactory.allocate(byteSize.size)
-
-    val bitmapRegistry: BitmapRegistryGroup = BitmapRegistry(memoryOffset = 0L, memorySize = byteSize, readOnly = false, lockRegistry = lockRegistry)
-
-    val memory = MemoryLedger(memory = memorySegment, bitmap = bitmapRegistry, maxBlockByteSize = blockSize)
-
-    val mapperRegistry = MemoryMapperRegistry(memory)
+    fun isAlive(): Boolean {
+        return context.ledger.memory.scope().isAlive()
+    }
 
     override fun close() {
         if (tryClose()) {
-            memoryFactory.close()
-            lockRegistry.close()
+            context.close()
         }
     }
 
@@ -81,8 +64,7 @@ internal class MemorySegmentFileSystem(
             parent = null,
             childType = NodeType.Directory,
             childName = File.separator,
-            mode = MemoryOpenOptions.CREATE_NEW,
-            targetNode = null,
+            mode = MemoryFileOpenOptions.REQUIRE_NEW,
         )
     }
 
@@ -90,40 +72,48 @@ internal class MemorySegmentFileSystem(
         return read(type = DirectoryNode::class, nodeRef = rootRef)
     }
 
-    fun getOrCreateDataChannel(
+    fun getOrCreateData(
         parent: DirectoryNode,
         childName: String,
-        mode: MemoryOpenOptions
+        mode: MemoryFileOpenOptions
     ): FragmentedReadWriteBuffer {
-        checkIsOpen()
+        checkIsWritable()
 
         val child = getOrCreateFile(
             parent = parent,
             childType = NodeType.Regular,
             childName = childName,
             mode = mode,
-            targetNode = null,
         )
 
         var dataSegmentRef: BlockStart? = readDataOffset(child)
 
-        val childLock = lockRegistry.newLock(offset = child, mode = mode)
+        val childLock = context.locks.newLock(offset = child, mode = mode)
         childLock.acquire()
-
         try {
             if (dataSegmentRef == null) {
                 dataSegmentRef = readDataOffset(child)
                 if (dataSegmentRef == null) {
-                    require(mode.write)
+                    Check.isTrue { mode.readWrite }
 
-                    val dataSegment = memory.newByteChannel(mode = mode, lock = childLock)
+                    val dataSegment = context.ledger.newBuffer(name = "$childName.data", lock = childLock)
                     updateDataOffset(nodeRef = child, newDataRef = dataSegment.first())
                     return dataSegment
                 } else {
-                    return memory.existingByteChannel(mode = mode, offset = dataSegmentRef, lock = childLock)
+                    return context.ledger.existingBuffer(
+                        name = "$childName.data",
+                        mode = mode,
+                        offset = dataSegmentRef,
+                        lock = childLock
+                    )
                 }
             } else {
-                return memory.existingByteChannel(mode = mode, offset = dataSegmentRef, lock = childLock)
+                return context.ledger.existingBuffer(
+                    name = "$childName.data",
+                    mode = mode,
+                    offset = dataSegmentRef,
+                    lock = childLock
+                )
             }
         } catch (e: Exception) {
             childLock.release()
@@ -136,80 +126,66 @@ internal class MemorySegmentFileSystem(
         parent: DirectoryNode?,
         childType: NodeType,
         childName: String,
-        mode: MemoryOpenOptions,
-        targetNode: ValidNode?,
+        mode: MemoryFileOpenOptions,
+        targetNode: ValidNode? = null,
     ): BlockStart {
-        checkIsOpen()
+        checkIsWritable()
 
-        if (childName.isEmpty()) {
-            throw MemoryIllegalFileNameException()
-        }
+        Require.notEmpty(childName)
 
         val existingChild = findChildByName(parent, childName)
         if (existingChild != null) {
-            if (mode.createNew) {
-                throw FileAlreadyExistsException(childName)
-            }
+            requireNew(mode, childName)
             return existingChild.offset
         }
 
-        val parentLock = lockRegistry.newLock(offset = parent?.offset, mode = WRITE)
+        val parentLock = context.locks.newLock(offset = parent?.offset, mode = WRITE_TRUNCATE)
         return parentLock.use {
             val existingChild = findChildByName(parent, childName)
             if (existingChild != null) {
-                if (mode.createNew) {
-                    throw FileAlreadyExistsException(childName)
-                }
+                requireNew(mode, childName)
                 return@use existingChild.offset
             }
             if (!mode.create) {
                 throw NoSuchFileException(childName)
             }
 
-//            attrs
-            val attrsMapper = mapperRegistry.startAttrs()
-            val attrs = AttributesBlock(now = Instant.now())
-            attrsMapper.writeLastAccessTime(attrs.lastAccessTime)
-            attrsMapper.writeLastModifiedTime(attrs.lastModifiedTime)
-            attrsMapper.writeCreationTime(attrs.creationTime)
-            attrsMapper.writePermissions(attrs.permissions)
-            attrsMapper.writeOwner(attrs.owner)
-            attrsMapper.writeGroup(attrs.group)
-            val attrsOffset = attrsMapper.flip()
-
-//            name
-            val nameMapper = mapperRegistry.startName()
-            nameMapper.writeName(childName)
-            val nameOffset = nameMapper.flip()
-
-//            node
-            val nodeMapper = mapperRegistry.startNode()
-            nodeMapper.writeType(childType)
-            if (targetNode != null) {
-                val dataOffset = readDataOffset(targetNode.offset)
-                if (dataOffset != null) {
-                    nodeMapper.writeDataOffset(dataOffset)
-                } else {
-                    nodeMapper.writeDataOffset(BlockStart.InvalidAddress)
-                }
-            } else {
-                nodeMapper.writeDataOffset(BlockStart.InvalidAddress)
-            }
-            nodeMapper.writeAttrOffset(attrsOffset)
-            nodeMapper.writeNameOffset(nameOffset)
-            val nodeOffset = nodeMapper.flip()
-
-//            parent
-            if (parent != null) {
-                addChild(parent = parent, childRef = nodeOffset)
-            }
-
-            return@use nodeOffset
+            return@use createFile(childName, childType, targetNode, parent)
         }
     }
 
+    private fun createFile(name: String, type: NodeType, target: ValidNode? = null, parent: DirectoryNode? = null): BlockStart {
+        val nameMapper = context.mappers.createName(name)
+        val nameOffset = nameMapper.flip()
+
+        val attrsMapper = context.mappers.createAttrs(name = "$name.attrs")
+        val attrsOffset = attrsMapper.flip()
+
+        val nodeMapper = context.mappers.createFile(name = name)
+        nodeMapper.writeType(type)
+        if (target != null) {
+            val dataOffset = readDataOffset(target.offset)
+            if (dataOffset != null) {
+                nodeMapper.writeDataOffset(dataOffset)
+            } else {
+                nodeMapper.writeDataOffset(BlockStart.InvalidAddress)
+            }
+        } else {
+            nodeMapper.writeDataOffset(BlockStart.InvalidAddress)
+        }
+        nodeMapper.writeAttrOffset(attrsOffset)
+        nodeMapper.writeNameOffset(nameOffset)
+        val nodeOffset = nodeMapper.flip()
+
+        if (parent != null) {
+            addChild(parent = parent, childRef = nodeOffset)
+        }
+
+        return nodeOffset
+    }
+
     fun <T : Any> read(type: KClass<T>, nodeRef: BlockStart): T {
-        val node = memory.existingByteChannel(mode = READ, offset = nodeRef)
+        val node = context.ledger.existingBuffer(name = type.simpleName!!, mode = READ, offset = nodeRef)
         node.use {
             if (ValidNode::class.isSuperclassOf(type)) {
                 val fileTypeOrdinal = node.readInt()
@@ -219,7 +195,7 @@ internal class MemorySegmentFileSystem(
                 requireNotNull(nameRef)
                 requireNotNull(attrRef)
 
-                val nameChannel = memory.existingByteChannel(mode = READ, offset = nameRef)
+                val nameChannel = context.ledger.existingBuffer(name = "name", mode = READ, offset = nameRef)
                 val name = nameChannel.use {
                     it.readString()
                 }
@@ -269,18 +245,16 @@ internal class MemorySegmentFileSystem(
         }
     }
 
-    fun delete(parent: NamedNode?, child: ValidNode) {
-        if (child.offset == this.rootRef) {
-            return
-        }
+    fun delete(parent: NamedNode, child: ValidNode) {
+        Check.isTrue { child.offset != this.rootRef }
 
         require(parent is DirectoryNode)
-        val parentLock = lockRegistry.newLock(offset = parent.offset, mode = WRITE)
+        val parentLock = context.locks.newLock(offset = parent.offset, mode = WRITE_TRUNCATE)
         parentLock.use {
             removeChildByName(parent, child.name)
         }
 
-        val childLock = lockRegistry.newLock(offset = child.offset, mode = WRITE)
+        val childLock = context.locks.newLock(offset = child.offset, mode = WRITE_TRUNCATE)
         childLock.use {
             if (child is DirectoryNode) {
                 val readChildIds = readChildrenRefs(child)
@@ -292,21 +266,21 @@ internal class MemorySegmentFileSystem(
             if (child is RegularFileNode || child is DirectoryNode) {
                 val dataRef = readDataOffset(child.offset)
                 if (dataRef != null) {
-                    memory.release(dataRef)
+                    context.ledger.release(dataRef)
                 }
             }
 
             val attrRef = readAttrsOffset(child.offset)
             if (attrRef != null) {
-                memory.release(attrRef)
+                context.ledger.release(attrRef)
             }
 
             val nameOffset = readNameOffset(child.offset)
             if (nameOffset != null) {
-                memory.release(nameOffset)
+                context.ledger.release(nameOffset)
             }
 
-            memory.release(child.offset)
+            context.ledger.release(child.offset)
         }
     }
 
@@ -322,19 +296,19 @@ internal class MemorySegmentFileSystem(
     }
 
     //    attrs
-    fun findAttrs(node: ValidNode): AttributesBlock {
-        val attrRef = readAttrsOffset(start = node.offset)
+    fun findAttrs(nodeOffset: BlockStart): AttributesBlock {
+        val attrRef = readAttrsOffset(start = nodeOffset)
         requireNotNull(attrRef)
 
         return readAttrs(attrsRef = attrRef)
     }
 
     fun updateFileTime(offset: BlockStart, attrs: AttributesBlock) {
-        lockRegistry.newLock(offset = offset, mode = WRITE).use {
+        context.locks.newLock(offset = offset, mode = WRITE_TRUNCATE).use {
             val attrsRef = readAttrsOffset(offset)
             requireNotNull(attrsRef)
 
-            val attrsByteChannel = memory.existingByteChannel(mode = WRITE, offset = attrsRef)
+            val attrsByteChannel = context.ledger.existingBuffer(name = "attrs", mode = WRITE_TRUNCATE, offset = attrsRef)
             attrsByteChannel.use {
                 it.writeInstant(attrs.lastAccessTime)
                 it.writeInstant(attrs.lastModifiedTime)
@@ -344,11 +318,11 @@ internal class MemorySegmentFileSystem(
     }
 
     fun updatePermissions(offset: BlockStart, attrs: AttributesBlock) {
-        lockRegistry.newLock(offset = offset, mode = WRITE).use {
+        context.locks.newLock(offset = offset, mode = WRITE_TRUNCATE).use {
             val attrsRef = readAttrsOffset(offset)
             requireNotNull(attrsRef)
 
-            val attrsByteChannel = memory.existingByteChannel(mode = WRITE, offset = attrsRef)
+            val attrsByteChannel = context.ledger.existingBuffer(name = "attrs", mode = WRITE_TRUNCATE, offset = attrsRef)
             attrsByteChannel.use {
                 it.readInstant()
                 it.readInstant()
@@ -360,7 +334,7 @@ internal class MemorySegmentFileSystem(
     }
 
     private fun readAttrs(attrsRef: BlockStart): AttributesBlock {
-        val attrsByteChannel = memory.existingByteChannel(mode = READ, offset = attrsRef)
+        val attrsByteChannel = context.ledger.existingBuffer(name = "attrs", mode = READ, offset = attrsRef)
         attrsByteChannel.use {
             val accessed = it.readInstant()
             val modified = it.readInstant()
@@ -400,8 +374,9 @@ internal class MemorySegmentFileSystem(
     }
 
     //    children
-    fun findChildren(parent: DirectoryNode): Sequence<ValidNode> {
-        return readChildrenRefs(parent).map { read(type = ValidNode::class, nodeRef = it) }
+    fun findChildren(node: DirectoryNode): Sequence<ValidNode> {
+        val readChildrenRefs = readChildrenRefs(node)
+        return readChildrenRefs.map { read(type = ValidNode::class, nodeRef = it) }
     }
 
     fun findChildByName(parent: DirectoryNode?, name: String): ValidNode? {
@@ -423,7 +398,7 @@ internal class MemorySegmentFileSystem(
     }
 
     private fun addChild(parent: DirectoryNode, childRef: BlockStart) {
-        lockRegistry.newLock(offset = parent.offset, mode = WRITE).use {
+        context.locks.newLock(offset = parent.offset, mode = WRITE_TRUNCATE).use {
             val children: Sequence<BlockStart> = readChildrenRefs(parent) + childRef
 
             upsertChildren(nodeRef = parent.offset, prevDataRef = parent.dataRef, children = children)
@@ -442,19 +417,22 @@ internal class MemorySegmentFileSystem(
     }
 
     private fun readChildrenRefs(parent: DirectoryNode): Sequence<BlockStart> {
-        val dataRef = readDataOffset(parent.offset) ?: return sequenceOf()
-        return readChildrenRefs(dataRef)
+        val dataRef = readDataOffset(parent.offset)
+        if (dataRef != null) {
+            return readChildrenRefs(dataRef)
+        }
+        return sequenceOf()
     }
 
     private fun upsertChildren(nodeRef: BlockStart, prevDataRef: BlockStart, children: Sequence<BlockStart>) {
         if (prevDataRef.isValid()) {
-            memory.release(offset = prevDataRef)
+            context.ledger.release(offset = prevDataRef)
         }
 
         val childrenCount = children.count()
         val newDataRef: BlockStart = if (childrenCount > 0) {
-            val maxExpectedBodySize = intByteSize + (memory.offsetBytes * childrenCount)
-            val newDataByteChannel = memory.newByteChannel(bodySize = maxExpectedBodySize)
+            val maxExpectedBodySize = intByteSize + (context.ledger.offsetBytes * childrenCount)
+            val newDataByteChannel = context.ledger.newBuffer(name = "children", bodyAlignment = maxExpectedBodySize)
             newDataByteChannel.use {
                 it.writeOffsets(children)
             }
@@ -466,7 +444,7 @@ internal class MemorySegmentFileSystem(
     }
 
     private fun updateDataOffset(nodeRef: BlockStart, newDataRef: BlockStart) {
-        val nodeSegmentChannel = memory.existingByteChannel(mode = WRITE, offset = nodeRef)
+        val nodeSegmentChannel = context.ledger.existingBuffer(name = "data", mode = WRITE_TRUNCATE, offset = nodeRef)
         nodeSegmentChannel.use {
             it.skipInt()
             it.writeOffset(newDataRef)
@@ -475,9 +453,15 @@ internal class MemorySegmentFileSystem(
     }
 
     private fun readChildrenRefs(dataRef: BlockStart): Sequence<BlockStart> {
-        val childrenByteChannel = memory.existingByteChannel(mode = READ, offset = dataRef)
+        val childrenByteChannel = context.ledger.existingBuffer(name = "children", mode = READ, offset = dataRef)
         childrenByteChannel.use {
             return it.readRefs()
+        }
+    }
+
+    private fun requireNew(mode: MemoryFileOpenOptions, childName: String) {
+        if (mode.requireNew) {
+            throw FileAlreadyExistsException(childName)
         }
     }
 }

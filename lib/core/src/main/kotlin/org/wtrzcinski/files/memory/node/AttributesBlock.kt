@@ -16,20 +16,16 @@
 
 package org.wtrzcinski.files.memory.node
 
-import org.wtrzcinski.files.memory.address.BlockStart
-import org.wtrzcinski.files.memory.address.DefaultBlockStart
+import java.nio.file.attribute.PosixFilePermission
+import java.nio.file.attribute.PosixFilePermissions
+import java.time.Instant
 
-class SymbolicLinkNode(
-    name: String,
-    nodeRef: BlockStart,
-    dataRef: BlockStart = BlockStart.InvalidAddress,
-    attrRef: BlockStart = BlockStart.InvalidAddress,
-    nameRef: BlockStart = BlockStart.InvalidAddress,
-) : ValidNode(
-    offset = DefaultBlockStart(nodeRef),
-    fileType = NodeType.SymbolicLink,
-    dataRef = DefaultBlockStart(dataRef),
-    attrsRef = DefaultBlockStart(attrRef),
-    nameRef = DefaultBlockStart(nameRef),
-    name = name,
+class AttributesBlock(
+    val now: Instant = Instant.ofEpochSecond(0, 0),
+    val lastAccessTime: Instant = now,
+    val lastModifiedTime: Instant = now,
+    val creationTime: Instant = now,
+    val permissions: Set<PosixFilePermission> = PosixFilePermissions.fromString("rwx".repeat(3)),
+    val owner: String = "",
+    val group: String = "",
 )

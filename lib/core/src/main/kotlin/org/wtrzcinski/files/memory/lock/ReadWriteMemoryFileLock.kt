@@ -18,29 +18,30 @@ package org.wtrzcinski.files.memory.lock
 
 import org.wtrzcinski.files.memory.address.BlockStart
 import org.wtrzcinski.files.memory.address.DefaultBlockStart
-import org.wtrzcinski.files.memory.buffer.MemoryOpenOptions
-import org.wtrzcinski.files.memory.util.Preconditions.assertTrue
+import org.wtrzcinski.files.memory.provider.MemoryFileOpenOptions
+import org.wtrzcinski.files.memory.util.Check
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
-open class ReadWriteMemoryFileLock(
-    private val registry: MemoryLockRegistry? = null,
-    private val start: BlockStart = BlockStart.InvalidAddress,
+data class ReadWriteMemoryFileLock(
+    private val registry: MemoryLockRegistry,
+    private val start: BlockStart,
     private val lock: ReentrantReadWriteLock = ReentrantReadWriteLock(true),
     var refs: AtomicInt = AtomicInt(0),
 ) {
+
     init {
-        assertTrue(start is DefaultBlockStart)
+        Check.isTrue { start is DefaultBlockStart }
     }
 
     fun refCount(): Int {
         return refs.load()
     }
 
-    fun acquire(mode: MemoryOpenOptions): ReadWriteMemoryFileLock {
-        if (mode.write) {
+    fun acquire(mode: MemoryFileOpenOptions): ReadWriteMemoryFileLock {
+        if (mode.readWrite) {
             lock.writeLock().lockInterruptibly()
         } else {
             lock.readLock().lockInterruptibly()
@@ -48,13 +49,13 @@ open class ReadWriteMemoryFileLock(
         return this
     }
 
-    fun release(mode: MemoryOpenOptions) {
-        if (mode.write) {
+    fun release(mode: MemoryFileOpenOptions) {
+        if (mode.readWrite) {
             lock.writeLock().unlock()
         } else {
             lock.readLock().unlock()
         }
 
-        registry?.releaseLock(offset = start, mode = mode)
+        registry.releaseLock(offset = start, mode = mode)
     }
 }

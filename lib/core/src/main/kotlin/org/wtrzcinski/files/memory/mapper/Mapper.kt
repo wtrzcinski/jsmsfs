@@ -14,22 +14,13 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.node
+package org.wtrzcinski.files.memory.mapper
 
 import org.wtrzcinski.files.memory.address.BlockStart
-import org.wtrzcinski.files.memory.address.DefaultBlockStart
 
-class SymbolicLinkNode(
-    name: String,
-    nodeRef: BlockStart,
-    dataRef: BlockStart = BlockStart.InvalidAddress,
-    attrRef: BlockStart = BlockStart.InvalidAddress,
-    nameRef: BlockStart = BlockStart.InvalidAddress,
-) : ValidNode(
-    offset = DefaultBlockStart(nodeRef),
-    fileType = NodeType.SymbolicLink,
-    dataRef = DefaultBlockStart(dataRef),
-    attrsRef = DefaultBlockStart(attrRef),
-    nameRef = DefaultBlockStart(nameRef),
-    name = name,
-)
+interface Mapper {
+    /**
+     * Switch mode from writing to reading.
+     */
+    fun flip(): BlockStart
+}

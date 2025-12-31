@@ -16,37 +16,44 @@
 
 package org.wtrzcinski.files.memory.allocator
 
-import org.wtrzcinski.files.memory.MemoryLedger
+import org.wtrzcinski.files.memory.MemorySegmentLedger
 import org.wtrzcinski.files.memory.address.BlockStart
 import org.wtrzcinski.files.memory.address.ByteSize
 import org.wtrzcinski.files.memory.bitmap.BitmapRegistry
-import org.wtrzcinski.files.memory.buffer.IntMemoryByteBuffer
-import org.wtrzcinski.files.memory.buffer.MemoryByteBuffer
+import org.wtrzcinski.files.memory.buffer.chunk.ChunkReadWriteBuffer
+import org.wtrzcinski.files.memory.buffer.chunk.IntReadWriteBuffer
 import org.wtrzcinski.files.memory.mapper.MemoryMapperRegistry.Companion.intByteSize
+import org.wtrzcinski.files.memory.util.Check
 import java.lang.foreign.MemorySegment
 
 internal class IntMemoryLedger(
     memory: MemorySegment,
     bitmap: BitmapRegistry,
     maxBlockByteSize: ByteSize,
-) : MemoryLedger(
+) : MemorySegmentLedger(
     memory = memory,
     bitmap = bitmap,
     maxBlockSize = maxBlockByteSize
 ) {
+    companion object {
+        //        -1L is reserved for invalid references
+        val MaxUnsignedIntInclusive: Long = Integer.toUnsignedLong(-1) - 1L
+    }
+
+    override val sizeBytes: ByteSize = intByteSize
+
     override val offsetBytes: ByteSize = intByteSize
 
     init {
-        require(maxBlockByteSize >= headerBytes)
+        Check.isTrue { maxBlockByteSize >= headerBytes }
     }
 
-    override fun directBuffer(start: BlockStart, size: ByteSize): MemoryByteBuffer {
-        val asSlice: MemorySegment = this@IntMemoryLedger.memory.asSlice(start.start, size.size)
-        return IntMemoryByteBuffer(memorySegment = asSlice, release = { this.release(it.flip()) })
-    }
-
-    override fun heapBuffer(size: ByteSize): MemoryByteBuffer {
-        val segment = MemorySegment.ofArray(ByteArray(size.size.toInt()))
-        return IntMemoryByteBuffer(memorySegment = segment, release = {})
+    override fun directBuffer(start: BlockStart, size: ByteSize): ChunkReadWriteBuffer {
+        try {
+            val asSlice: MemorySegment = this@IntMemoryLedger.memory.asSlice(start.start, size.size)
+            return IntReadWriteBuffer(memorySegment = asSlice, release = { this.release(it.flip()) })
+        } catch (e: IndexOutOfBoundsException) {
+            throw e
+        }
     }
 }

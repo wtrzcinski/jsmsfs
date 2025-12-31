@@ -47,7 +47,9 @@ interface Block : BlockStart, BlockSize {
     }
 
     operator fun minus(other: Block): DefaultBlock {
-        if (this.end == other.end) {
+        val thisEnd = this.end
+        val otherEnd = other.end
+        if (thisEnd == otherEnd) {
             return BitmapEntry(start = start, size = size - other.size)
         }
         throw MemoryIllegalArgumentException()

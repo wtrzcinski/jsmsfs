@@ -16,12 +16,12 @@
 
 package org.wtrzcinski.files.memory.allocator
 
-import org.wtrzcinski.files.memory.MemoryLedger
+import org.wtrzcinski.files.memory.MemorySegmentLedger
 import org.wtrzcinski.files.memory.address.BlockStart
 import org.wtrzcinski.files.memory.address.ByteSize
 import org.wtrzcinski.files.memory.bitmap.BitmapRegistry
-import org.wtrzcinski.files.memory.buffer.LongMemoryByteBuffer
-import org.wtrzcinski.files.memory.buffer.MemoryByteBuffer
+import org.wtrzcinski.files.memory.buffer.chunk.LongReadWriteBuffer
+import org.wtrzcinski.files.memory.buffer.chunk.ChunkReadWriteBuffer
 import org.wtrzcinski.files.memory.mapper.MemoryMapperRegistry.Companion.longByteSize
 import java.lang.foreign.MemorySegment
 
@@ -29,11 +29,13 @@ internal class LongMemoryLedger(
     memory: MemorySegment,
     bitmap: BitmapRegistry,
     maxBlockByteSize: ByteSize,
-) : MemoryLedger(
+) : MemorySegmentLedger(
     memory = memory,
     bitmap = bitmap,
     maxBlockSize = maxBlockByteSize,
 ) {
+
+    override val sizeBytes: ByteSize = longByteSize
 
     override val offsetBytes: ByteSize = longByteSize
 
@@ -41,13 +43,8 @@ internal class LongMemoryLedger(
         require(maxBlockByteSize >= headerBytes)
     }
 
-    override fun directBuffer(start: BlockStart, size: ByteSize): MemoryByteBuffer {
+    override fun directBuffer(start: BlockStart, size: ByteSize): ChunkReadWriteBuffer {
         val asSlice: MemorySegment = this@LongMemoryLedger.memory.asSlice(start.start, size.size)
-        return LongMemoryByteBuffer(memorySegment = asSlice, release = { this.release(it.flip()) })
-    }
-
-    override fun heapBuffer(size: ByteSize): MemoryByteBuffer {
-        val segment = MemorySegment.ofArray(ByteArray(size.size.toInt()))
-        return LongMemoryByteBuffer(memorySegment = segment, release = {})
+        return LongReadWriteBuffer(memorySegment = asSlice, release = { this.release(it.flip()) })
     }
 }

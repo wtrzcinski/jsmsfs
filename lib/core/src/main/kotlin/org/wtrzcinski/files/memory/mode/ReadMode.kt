@@ -14,12 +14,10 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.mapper
+package org.wtrzcinski.files.memory.mode
 
-import org.wtrzcinski.files.memory.address.BlockStart
-
-interface DataMapper {
-
-    fun flip(): BlockStart
-
+enum class ReadMode {
+    Block,
+    Header,
+    Body,
 }

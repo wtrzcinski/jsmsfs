@@ -16,9 +16,8 @@
 
 package org.wtrzcinski.files.memory.bitmap
 
-import org.wtrzcinski.files.memory.exception.OptimisticLockException
 import org.wtrzcinski.files.memory.address.ByteSize
-import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.concurrent.atomics.minusAssign
@@ -27,37 +26,26 @@ import kotlin.concurrent.atomics.plusAssign
 @OptIn(ExperimentalAtomicApi::class)
 class BitmapReservedBlocks {
 
-    private val reserved: CopyOnWriteArrayList<BitmapEntry> = CopyOnWriteArrayList()
+    val byStartOffset: MutableMap<Long, BitmapEntry> = ConcurrentHashMap()
 
-    private val first: CopyOnWriteArrayList<BitmapEntry> = CopyOnWriteArrayList()
+    val byEndOffset: MutableMap<Long, BitmapEntry> = ConcurrentHashMap()
 
     private val reservedSize: AtomicLong = AtomicLong(0)
 
-    val count: Int get() = reserved.size
+    val count: Int get() = byStartOffset.size
 
-    val byteSize: ByteSize get() = ByteSize(reservedSize.load())
+    val size: ByteSize get() = ByteSize(reservedSize.load())
 
     fun add(other: BitmapEntry): BitmapEntry {
-        reserved.add(other)
-        if (other.isFirst()) {
-            first.add(other)
-        }
+        this.byStartOffset[other.start] = other
+        this.byEndOffset[other.end] = other
         this.reservedSize += other.size
         return other
     }
 
     fun remove(other: BitmapEntry) {
-        val remove = reserved.remove(other)
-        if (!remove) {
-            throw OptimisticLockException()
-        }
-        if (other.isFirst()) {
-            first.remove(other)
-        }
+        checkNotNull(this.byStartOffset.remove(other.start))
+        checkNotNull(this.byEndOffset.remove(other.end))
         this.reservedSize -= other.size
-    }
-
-    fun copy(): Iterable<BitmapEntry> {
-        return ArrayList(reserved)
     }
 }

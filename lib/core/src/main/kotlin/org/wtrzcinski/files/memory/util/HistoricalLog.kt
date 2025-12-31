@@ -16,42 +16,71 @@
 
 package org.wtrzcinski.files.memory.util
 
-import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.reflect.KClass
 
+@Suppress("unused")
 object HistoricalLog {
 
-    private val log: Logger = LoggerFactory.getLogger(HistoricalLog::class.java)
+    private val collect: Boolean = Configuration.isSet("log.logger", "collect", matchIfMissing = false)
 
-    private val debug: Boolean = Configuration.isSet("log.debug", "true", matchIfMissing = false)
+    private val debug: Boolean = Configuration.isSet("log.logger", "debug", matchIfMissing = false)
 
-    data class LogEntry(val threadName: String, val time: Long, val message: Any) {
+    private val info: Boolean = true
+
+    data class LogEntry(
+        val type: KClass<*>,
+        val threadName: String,
+        val time: Long,
+        val message: Any
+    ) {
         override fun toString(): String {
             return "$threadName $time $message"
         }
     }
 
+    private val loggers: ConcurrentHashMap<String, org.slf4j.Logger> = ConcurrentHashMap()
+
     private val map = ConcurrentHashMap<String, CopyOnWriteArrayList<LogEntry>>()
 
-    fun debug(message: () -> Any) {
-        if (debug) {
-            val now = System.nanoTime()
+    fun info(target: Any, message: () -> Any) {
+        if (info) {
+            val loggerName = checkNotNull(target::class.simpleName)
+            val log = loggers.computeIfAbsent(loggerName) {
+                LoggerFactory.getLogger(loggerName)
+            }
+            log.info("{}", message.invoke())
+        }
+    }
+
+    fun debug(target: Any, message: () -> Any) {
+        if (collect) {
             val threadName = Thread.currentThread().name
             map.compute(threadName) { _, value ->
                 if (value == null) {
                     val list = CopyOnWriteArrayList<LogEntry>()
-                    list.add(LogEntry(threadName, now, message.invoke()))
+                    list.add(entry(target::class, threadName, message))
                     return@compute list
                 } else {
-                    value.add(LogEntry(threadName, now, message.invoke()))
+                    value.add(entry(target::class, threadName, message))
                     return@compute value
                 }
             }
-        } else {
-            log.info("{}", message.invoke())
+        } else if (debug) {
+            val loggerName = checkNotNull(target::class.simpleName)
+            val log = loggers.computeIfAbsent(loggerName) {
+                LoggerFactory.getLogger(loggerName)
+            }
+            log.debug("{}", message.invoke())
         }
+    }
+
+    private fun entry(type: KClass<*>, threadName: String, message: () -> Any): LogEntry {
+        val now = System.nanoTime()
+
+        return LogEntry(type, threadName, now, message.invoke())
     }
 
     fun getAndClear(): List<Any> {

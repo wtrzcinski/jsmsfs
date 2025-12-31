@@ -14,20 +14,23 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.buffer
+package org.wtrzcinski.files.memory.buffer.chunk
 
 import org.wtrzcinski.files.memory.address.BlockStart
 import org.wtrzcinski.files.memory.address.ByteSize
+import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer
+import org.wtrzcinski.files.memory.buffer.channel.FragmentedReadWriteBuffer
 import org.wtrzcinski.files.memory.mapper.BlockBodyMapper
+import org.wtrzcinski.files.memory.mode.AbstractCloseable
 import java.lang.foreign.MemorySegment
 import java.nio.ByteBuffer
 
 @Suppress("UsePropertyAccessSyntax")
-abstract class MemoryByteBuffer(
+abstract class ChunkReadWriteBuffer(
     val memorySegment: MemorySegment,
     val byteBuffer: ByteBuffer,
-    val release: (MemoryByteBuffer) -> Unit = {},
-) : AutoCloseable, MemoryReadWriteBuffer, BlockBodyMapper {
+    val release: (ChunkReadWriteBuffer) -> Unit = {},
+) : AbstractCloseable(), MemoryReadWriteBuffer, BlockBodyMapper {
 
     abstract val offsetBytes: ByteSize
 
@@ -48,12 +51,19 @@ abstract class MemoryByteBuffer(
     /**
      * @see MemorySegment.force
      */
-    fun force() {
+    fun flush() {
         if (!memorySegment.isReadOnly()) {
             if (memorySegment.isMapped()) {
                 memorySegment.force()
             }
         }
+    }
+
+    /**
+     * @see java.nio.Buffer.limit
+     */
+    fun limit(limit: ByteSize) {
+        byteBuffer.limit(limit.toInt())
     }
 
     /**
@@ -74,8 +84,14 @@ abstract class MemoryByteBuffer(
      * @see java.nio.Buffer.flip
      */
     override fun flip(): BlockStart {
-        byteBuffer.flip()
-        return BlockStart(offset = memorySegment.address())
+        if (tryFlip()) {
+            check(byteBuffer.position() > 0)
+
+            byteBuffer.flip()
+            return BlockStart(offset = memorySegment.address())
+        } else {
+            throwIllegalStateException()
+        }
     }
 
     /**
@@ -89,7 +105,7 @@ abstract class MemoryByteBuffer(
      * @see java.nio.Buffer.remaining
      */
     fun remaining(): ByteSize {
-        return ByteSize(value = byteBuffer.remaining().toLong())
+        return ByteSize(value = byteBuffer.remaining())
     }
 
     /**
@@ -116,8 +132,8 @@ abstract class MemoryByteBuffer(
     /**
      * @see ByteBuffer.put
      */
-    override fun write(value: MemoryByteBuffer): Int {
-        val src = value.byteBuffer
+    override fun write(buffer: ChunkReadWriteBuffer): Int {
+        val src = buffer.byteBuffer
         val remaining = src.remaining()
         byteBuffer.put(src)
         return remaining
@@ -126,22 +142,32 @@ abstract class MemoryByteBuffer(
     /**
      * @see ByteBuffer.put
      */
-    fun write(byteArray: ByteArray, offset: Int, remaining: Int) {
-        byteBuffer.put(byteArray, offset, remaining)
+    fun write(other: ByteBuffer, length: ByteSize) {
+        val currentPosition = this.byteBuffer.position()
+        val otherPosition = other.position()
+        this.byteBuffer.put(currentPosition, other, otherPosition, length.toInt())
+        this.byteBuffer.position(currentPosition + length.toInt())
+        other.position(otherPosition + length.toInt())
+    }
+
+    override fun write(value: FragmentedReadWriteBuffer): Int {
+        TODO("Not yet implemented")
     }
 
     /**
      * @see ByteBuffer.getInt
      */
     override fun readInt(): Int {
-        return byteBuffer.getInt()
+        val value = byteBuffer.getInt()
+        return value
     }
 
     /**
      * @see ByteBuffer.getLong
      */
     override fun readLong(): Long {
-        return byteBuffer.getLong()
+        val value = byteBuffer.getLong()
+        return value
     }
 
     /**
@@ -160,6 +186,6 @@ abstract class MemoryByteBuffer(
     }
 
     override fun close() {
-        force()
+        flush()
     }
 }

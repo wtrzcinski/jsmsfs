@@ -14,14 +14,21 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.address
+package org.wtrzcinski.files.memory.mode
 
-data class ByteAlignment(
-    val count: UByte,
-) {
-    companion object {
-        val ShortAlignment = ByteAlignment(2u)
-        val IntAlignment = ByteAlignment(4u)
-        val LongAlignment = ByteAlignment(8u)
-    }
+import java.nio.file.OpenOption
+
+enum class OpenMode(
+    val writeable: Boolean  = false,
+    val readable: Boolean = false,
+    val open: Boolean = writeable || readable,
+) : OpenOption {
+
+    ReadWrite(writeable = true, readable = true),
+
+    ReadOnly(readable = true),
+
+    Close,
+
+    Release,
 }

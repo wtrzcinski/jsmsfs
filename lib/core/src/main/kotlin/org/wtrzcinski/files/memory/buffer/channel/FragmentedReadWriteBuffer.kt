@@ -18,16 +18,14 @@ package org.wtrzcinski.files.memory.buffer.channel
 
 import org.wtrzcinski.files.memory.address.BlockStart
 import org.wtrzcinski.files.memory.address.ByteSize
-import org.wtrzcinski.files.memory.buffer.MemoryByteBuffer
-import org.wtrzcinski.files.memory.buffer.MemoryReadBuffer
 import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer
-import org.wtrzcinski.files.memory.exception.MemoryIllegalStateException
+import org.wtrzcinski.files.memory.buffer.chunk.ChunkReadWriteBuffer
 import org.wtrzcinski.files.memory.lock.MemoryFileLock
-import org.wtrzcinski.files.memory.mapper.MemoryBlockMapperIterator
+import org.wtrzcinski.files.memory.mapper.MemoryBlockIterator
 import org.wtrzcinski.files.memory.mapper.MemoryBlockReadWriteMapper
 import org.wtrzcinski.files.memory.mapper.MemoryMapperRegistry
-import org.wtrzcinski.files.memory.util.AbstractCloseable
-import java.lang.AutoCloseable
+import org.wtrzcinski.files.memory.mode.AbstractCloseable
+import org.wtrzcinski.files.memory.util.Check
 import java.nio.ByteBuffer
 import java.nio.channels.SeekableByteChannel
 import java.nio.charset.Charset
@@ -38,8 +36,8 @@ import kotlin.concurrent.atomics.plusAssign
 @OptIn(ExperimentalAtomicApi::class)
 data class FragmentedReadWriteBuffer(
     val lock: MemoryFileLock?,
-    val data: MemoryBlockMapperIterator,
-) : SeekableByteChannel, AutoCloseable, MemoryReadWriteBuffer, AbstractCloseable(), FragmentedReadBuffer, MemoryReadBuffer {
+    val data: MemoryBlockIterator,
+) : SeekableByteChannel, MemoryReadWriteBuffer, AbstractCloseable(), FragmentedReadBuffer {
 
     private val position = AtomicLong(0)
 
@@ -47,6 +45,14 @@ data class FragmentedReadWriteBuffer(
         get() {
             return data.first().body.offsetBytes
         }
+
+    fun count(): Int {
+        return data.count()
+    }
+
+    fun get(index: Int): MemoryBlockReadWriteMapper {
+        return data.get(index)
+    }
 
     fun first(): MemoryBlockReadWriteMapper {
         return this.data.first()
@@ -56,17 +62,39 @@ data class FragmentedReadWriteBuffer(
         return data.bodySize().size
     }
 
+    fun remaining(): ByteSize {
+        return data.bodySize()
+    }
+
+    fun release() {
+        checkIsClosed()
+
+        if (tryRelease()) {
+            data.release()
+        } else {
+            throwIllegalStateException()
+        }
+    }
+
     override fun close() {
         if (tryClose()) {
             data.close()
 
-//            Preconditions.assertTrue {
-//                val position = position.load()
-//                val size = data.bodySize().size
-//                position == size
-//            }
-
             lock?.release()
+        }
+    }
+
+    fun flip(): BlockStart {
+        Check.isTrue { position.load() != 0L }
+
+        if (tryFlip()) {
+            data.flip()
+
+            position.exchange(0L)
+
+            return data.first()
+        } else {
+            throwIllegalStateException()
         }
     }
 
@@ -82,8 +110,7 @@ data class FragmentedReadWriteBuffer(
     }
 
     fun skipRemaining() {
-        checkIsOpen()
-        check(data.mode.read)
+        checkIsReadable()
 
         position += data.skipRemaining()
     }
@@ -92,16 +119,14 @@ data class FragmentedReadWriteBuffer(
         return current.body.offsetBytes
     }
 
-    override fun readOffset(): BlockStart? {
-        checkIsOpen()
-        check(data.mode.read)
+    override tailrec fun readOffset(): BlockStart? {
+        checkIsReadable()
 
-        val current = data.last()
+        val current = data.current()
+        checkNotNull(current)
         val remaining = current.body.remaining()
         if (remaining < offsetBytes(current)) {
-            if (next() == null) {
-                throw MemoryIllegalStateException()
-            }
+            checkNotNull(next())
             return readOffset()
         }
         position += offsetBytes(current).size
@@ -109,20 +134,18 @@ data class FragmentedReadWriteBuffer(
     }
 
     override fun readSize(): ByteSize {
-        checkIsOpen()
-        check(data.mode.read)
+        checkIsReadable()
 
         TODO("Not yet implemented")
     }
 
     override fun read(other: ByteBuffer): Int {
-        checkIsOpen()
-        check(data.mode.read)
+        checkIsReadable()
 
         val length = other.remaining()
         val byteArray = ByteArray(length)
         val read = read(dst = byteArray)
-        require(read <= other.remaining())
+        require(read <= length)
         if (read == 0) {
             return -1
         } else {
@@ -131,11 +154,11 @@ data class FragmentedReadWriteBuffer(
         }
     }
 
-    override fun readLong(): Long {
-        checkIsOpen()
-        check(data.mode.read)
+    override tailrec fun readLong(): Long {
+        checkIsReadable()
 
-        val current = data.last()
+        val current = data.current()
+        checkNotNull(current)
         val remaining = current.body.remaining()
         if (remaining < MemoryMapperRegistry.longByteSize) {
             requireNotNull(next())
@@ -146,21 +169,20 @@ data class FragmentedReadWriteBuffer(
     }
 
     override fun readString(charset: Charset): String {
-        checkIsOpen()
-        check(data.mode.read)
+        checkIsReadable()
 
-        return super<MemoryReadBuffer>.readString(charset)
+        return super<FragmentedReadBuffer>.readString(charset)
     }
 
     fun skipInt() {
         readOffset()
     }
 
-    override fun readInt(): Int {
-        checkIsOpen()
-        check(data.mode.read)
+    override tailrec fun readInt(): Int {
+        checkIsReadable()
 
-        val current = data.last()
+        val current = data.current()
+        checkNotNull(current)
         val remaining = current.body.remaining()
         if (remaining < MemoryMapperRegistry.intByteSize) {
             requireNotNull(next())
@@ -174,7 +196,7 @@ data class FragmentedReadWriteBuffer(
         var dstOffset = 0
         val dstLength = ByteSize(dst.size)
         while (!Thread.currentThread().isInterrupted) {
-            val current = data.last()
+            val current = data.current() ?: break
             val left = dstLength - dstOffset
             val remaining = current.body.remaining()
             if (remaining.isEmpty()) {
@@ -194,33 +216,28 @@ data class FragmentedReadWriteBuffer(
         return dstOffset
     }
 
-    override fun write(value: MemoryByteBuffer): Int {
-        checkIsOpen()
-        check(data.mode.write)
+    override fun write(value: FragmentedReadWriteBuffer): Int {
+        checkIsWritable()
 
-        val remaining = value.remaining()
-        val byteArray = ByteArray(remaining.toInt())
-        value.read(byteArray)
-        write(byteArray = byteArray, offset = 0)
-        return remaining.toInt()
+        var count = 0
+        for (mapper: MemoryBlockReadWriteMapper in value.data.data) {
+            count += write(mapper.body)
+        }
+
+        return count
     }
 
-    override fun write(other: ByteBuffer): Int {
-        checkIsOpen()
-        check(data.mode.write)
+    override fun write(buffer: ChunkReadWriteBuffer): Int {
+        checkIsWritable()
 
-        val remaining = other.remaining()
-        val byteArray = ByteArray(remaining)
-        other.get(byteArray)
-        write(byteArray = byteArray, offset = 0)
-        return remaining
+        return write(buffer.byteBuffer)
     }
 
-    override fun writeOffset(value: BlockStart) {
-        checkIsOpen()
-        check(data.mode.write)
+    override tailrec fun writeOffset(value: BlockStart) {
+        checkIsWritable()
 
-        val current = data.last()
+        val current = data.current()
+        checkNotNull(current)
         val remaining = current.body.remaining()
         if (remaining < offsetBytes(current)) {
             requireNotNull(next())
@@ -231,17 +248,16 @@ data class FragmentedReadWriteBuffer(
     }
 
     override fun writeSize(value: ByteSize) {
-        checkIsOpen()
-        check(data.mode.write)
+        checkIsWritable()
 
         TODO("Not yet implemented")
     }
 
-    override fun writeLong(value: Long) {
-        checkIsOpen()
-        check(data.mode.write)
+    override tailrec fun writeLong(value: Long) {
+        checkIsWritable()
 
-        val current = data.last()
+        val current = data.current()
+        checkNotNull(current)
         val remaining = current.body.remaining()
         if (remaining < MemoryMapperRegistry.longByteSize) {
             requireNotNull(next())
@@ -251,11 +267,11 @@ data class FragmentedReadWriteBuffer(
         current.body.writeLong(value)
     }
 
-    override fun writeInt(value: Int) {
-        checkIsOpen()
-        check(data.mode.write)
+    override tailrec fun writeInt(value: Int) {
+        checkIsWritable()
 
-        val current = data.last()
+        val current = data.current()
+        checkNotNull(current)
         val remaining = current.body.remaining()
         if (remaining < MemoryMapperRegistry.intByteSize) {
             requireNotNull(next())
@@ -266,22 +282,29 @@ data class FragmentedReadWriteBuffer(
     }
 
     override fun write(value: ByteArray) {
-        write(byteArray = value, offset = 0)
+        checkIsWritable()
+
+        write(other = ByteBuffer.wrap(value))
     }
 
-    private fun write(byteArray: ByteArray, offset: Int) {
-        val current = data.last()
-        val toWrite = byteArray.size - offset
-        val remaining = current.body.remaining()
-        if (remaining.toLong() < toWrite) {
-            current.body.write(byteArray, offset, remaining.toInt())
-            position += remaining.toLong()
-            val nextOffset = (offset + remaining.toInt())
+    override fun write(other: ByteBuffer): Int {
+        checkIsWritable()
+
+        val current = data.current()
+        checkNotNull(current)
+
+        val currentRemaining = current.body.remaining()
+        val otherRemaining = ByteSize(other.remaining())
+
+        if (currentRemaining < otherRemaining) {
+            current.body.write(other, currentRemaining)
+            position += currentRemaining.toLong()
             requireNotNull(next())
-            write(byteArray, nextOffset)
+            return currentRemaining.toInt() + write(other)
         } else {
-            current.body.write(byteArray, offset, toWrite)
-            position += toWrite.toLong()
+            current.body.write(other, otherRemaining)
+            position += otherRemaining.toLong()
+            return otherRemaining.toInt()
         }
     }
 
@@ -294,23 +317,18 @@ data class FragmentedReadWriteBuffer(
     }
 
     fun append(): FragmentedReadWriteBuffer {
-        checkIsOpen()
-        check(data.mode.write)
-
+        checkIsWritable()
         skipRemaining()
         return this
     }
 
     fun truncate(): FragmentedReadWriteBuffer {
-        checkIsOpen()
-        check(data.mode.write)
-
+        checkIsWritable()
         return truncate(0L)
     }
 
     override fun truncate(size: Long): FragmentedReadWriteBuffer {
-        checkIsOpen()
-        check(data.mode.write)
+        checkIsWritable()
 
         if (position() == 0L && size == 0L) {
             return this

@@ -18,5 +18,4 @@ package org.wtrzcinski.files.memory.buffer.channel
 
 import org.wtrzcinski.files.memory.buffer.MemoryReadBuffer
 
-interface FragmentedReadBuffer : MemoryReadBuffer {
-}
+interface FragmentedReadBuffer : MemoryReadBuffer

@@ -20,8 +20,7 @@ import org.wtrzcinski.files.memory.address.Block
 import org.wtrzcinski.files.memory.address.ByteSize
 import org.wtrzcinski.files.memory.exception.OptimisticLockException
 import org.wtrzcinski.files.memory.exception.OutOfMemoryException
-import org.wtrzcinski.files.memory.util.Preconditions.assertNull
-import org.wtrzcinski.files.memory.util.Preconditions.assertTrue
+import org.wtrzcinski.files.memory.util.Check
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.concurrent.atomics.AtomicLong
@@ -32,11 +31,15 @@ import kotlin.concurrent.atomics.plusAssign
 @OptIn(ExperimentalAtomicApi::class)
 class BitmapFreeBlocks {
 
-    private val byStartOffset: MutableMap<Long, Block> = ConcurrentHashMap()
+    interface FindStrategy {
+        fun find(free: BitmapFreeBlocks): Block
+    }
 
-    private val byEndOffset: MutableMap<Long, Block> = ConcurrentHashMap()
+    private val byStartOffset: MutableMap<Long, BitmapEntry> = ConcurrentHashMap()
 
-    private val bySize: MutableMap<Long, CopyOnWriteArrayList<Block>> = ConcurrentHashMap()
+    private val byEndOffset: MutableMap<Long, BitmapEntry> = ConcurrentHashMap()
+
+    private val bySize: MutableMap<Long, CopyOnWriteArrayList<BitmapEntry>> = ConcurrentHashMap()
 
     private var freeSize: AtomicLong = AtomicLong(0L)
 
@@ -56,9 +59,9 @@ class BitmapFreeBlocks {
     }
 
     fun add(current: Block) {
-        assertNull { findByStartOffset(current.start) }
+        Check.isNull { findByStartOffset(current.start) }
 
-        assertNull { findByStartOffset(current.middle) }
+        Check.isNull { findByStartOffset(current.middle) }
 
         val next = findByStartOffset(current.end)
         if (next != null) {
@@ -72,12 +75,12 @@ class BitmapFreeBlocks {
                 val join = prev.plus(current)
                 add(current = join)
             } else {
-                doAdd(current)
+                doAdd(BitmapEntry(current))
             }
         }
     }
 
-    private fun doAdd(other: Block): BitmapFreeBlocks {
+    private fun doAdd(other: BitmapEntry): BitmapFreeBlocks {
         this.freeSize += other.size
         this.byStartOffset[other.start] = other
         this.byEndOffset[other.end] = other
@@ -97,8 +100,8 @@ class BitmapFreeBlocks {
         this.freeSize -= other.size
     }
 
-    fun findBySize(minByteSize: ByteSize, maxByteSize: ByteSize): Block {
-        assertTrue { minByteSize <= maxByteSize }
+    fun findBySize(minByteSize: ByteSize, maxByteSize: ByteSize): BitmapEntry {
+        Check.isTrue { minByteSize <= maxByteSize }
 
         if (size < maxByteSize) {
             throw OutOfMemoryException()

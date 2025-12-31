@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.node.attribute
+package org.wtrzcinski.files.memory.provider
 
 import org.wtrzcinski.files.memory.MemorySegmentFileSystem
+import org.wtrzcinski.files.memory.node.AttributesBlock
 import org.wtrzcinski.files.memory.node.ValidNode
 import java.nio.ByteBuffer
 import java.nio.file.attribute.*
@@ -36,7 +37,8 @@ internal class MemoryFileAttributeView(
             lastModifiedTime = lastModifiedTime.toInstant(),
             lastAccessTime = lastAccessTime.toInstant(),
             creationTime = createTime.toInstant()
-        ))
+        )
+        )
     }
 
     override fun setPermissions(permissions: Set<PosixFilePermission>) {
@@ -48,7 +50,7 @@ internal class MemoryFileAttributeView(
             fileSystem = fileSystem,
             name = name,
             node = node,
-            attrs = fileSystem.findAttrs(node),
+            attrs = fileSystem.findAttrs(node.offset),
         )
     }
 

@@ -18,14 +18,13 @@ package org.wtrzcinski.files.memory.buffer
 
 import org.wtrzcinski.files.memory.address.BlockStart
 import org.wtrzcinski.files.memory.address.ByteSize
+import org.wtrzcinski.files.memory.allocator.IntMemoryLedger.Companion.MaxUnsignedIntInclusive
 import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer.Companion.InvalidRef
-import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer.Companion.MaxUnsignedIntInclusive
-import org.wtrzcinski.files.memory.util.Preconditions.assertTrue
-import org.wtrzcinski.files.memory.util.Preconditions.requireTrue
+import org.wtrzcinski.files.memory.util.Check
 import java.nio.charset.Charset
 import java.time.Instant
 
-@Suppress("unused", "KotlinConstantConditions")
+@Suppress("unused")
 interface MemoryReadBuffer {
 
     fun readOffset(): BlockStart?
@@ -44,8 +43,10 @@ interface MemoryReadBuffer {
             return null
         }
         val value = Integer.toUnsignedLong(intValue)
-        requireTrue(value >= 0)
-        requireTrue(value <= MaxUnsignedIntInclusive)
+        Check.isTrue {
+            val range: LongRange = 0..MaxUnsignedIntInclusive
+            value in range
+        }
         return value
     }
 
@@ -70,7 +71,7 @@ interface MemoryReadBuffer {
         val length = readInt()
         val dst = ByteArray(length)
         val read = read(dst)
-        assertTrue { read == length }
+        Check.isTrue { read == length }
         val result = String(dst, charset)
         return result
     }

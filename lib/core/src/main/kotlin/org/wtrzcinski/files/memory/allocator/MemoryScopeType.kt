@@ -16,7 +16,7 @@
 
 package org.wtrzcinski.files.memory.allocator
 
-import org.wtrzcinski.files.memory.util.Preconditions.assertTrue
+import org.wtrzcinski.files.memory.util.Check.isTrue
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.net.URI
@@ -30,7 +30,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentMap
 import java.util.function.Supplier
 
-internal enum class MemoryScopeType {
+enum class MemoryScopeType {
     HEAP {
         override fun createFactory(env: Map<String, *>): MemorySegmentFactory {
             return HeapMemorySegmentFactory()
@@ -162,11 +162,11 @@ internal enum class MemoryScopeType {
                     }
                 }
             }
-            return segments.compute(byteSize) { key, value ->
+            return segments.compute(byteSize) { _, value ->
                 if (value == null) {
                     arena!!.allocate(byteSize, byteAlignmen)
                 } else {
-                    assertTrue { value.maxByteAlignment() == byteAlignmen }
+                    isTrue { value.maxByteAlignment() == byteAlignmen }
                     value
                 }
             } as MemorySegment

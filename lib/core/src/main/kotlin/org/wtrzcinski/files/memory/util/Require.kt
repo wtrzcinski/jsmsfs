@@ -14,8 +14,30 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.exception
+package org.wtrzcinski.files.memory.util
 
-import java.nio.file.FileSystemException
+import org.wtrzcinski.files.memory.exception.MemoryUnsupportedOperationException
 
-class MemoryIllegalFileNameException : FileSystemException(null)
+@Suppress("NOTHING_TO_INLINE")
+object Require {
+
+    inline fun isTrue(check: Boolean) {
+        require(check)
+    }
+
+    inline fun notEmpty(string: String) {
+        require(string.isNotEmpty())
+    }
+
+    fun unsupported(): Nothing {
+        throw MemoryUnsupportedOperationException()
+    }
+
+    fun unreachable(): Nothing {
+        TODO("Not yet implemented")
+    }
+
+    fun todo(): Nothing {
+        TODO("Not yet implemented")
+    }
+}

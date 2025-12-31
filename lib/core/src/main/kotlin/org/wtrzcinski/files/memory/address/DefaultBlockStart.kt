@@ -18,6 +18,8 @@ package org.wtrzcinski.files.memory.address
 
 class DefaultBlockStart(override val start: Long) : BlockStart {
 
+    constructor(other: BlockStart): this(other.start)
+
     override fun toString(): String {
         return "${javaClass.simpleName}(start=$start)"
     }

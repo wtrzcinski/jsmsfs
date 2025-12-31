@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.buffer.channel
+package org.wtrzcinski.files.memory.provider
 
+import org.wtrzcinski.files.memory.buffer.channel.FragmentedReadWriteBuffer
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.nio.ByteBuffer
@@ -25,9 +26,7 @@ import java.nio.channels.FileLock
 import java.nio.channels.ReadableByteChannel
 import java.nio.channels.WritableByteChannel
 
-internal class MemoryFileChannel(
-    private val delegate: FragmentedReadWriteBuffer
-) : FileChannel() {
+internal class MemoryFileChannel(private val delegate: FragmentedReadWriteBuffer) : FileChannel() {
 
     //    seekable byte channel
     override fun read(dst: ByteBuffer): Int {
@@ -60,9 +59,7 @@ internal class MemoryFileChannel(
     }
 
     override fun map(mode: MapMode, position: Long, size: Long): MappedByteBuffer {
-        val directBuffer = ByteBuffer.allocateDirect(size.toInt())
-        require(directBuffer is MappedByteBuffer)
-        return directBuffer
+        TODO("Not yet implemented")
     }
 
     override fun map(mode: MapMode, offset: Long, size: Long, arena: Arena): MemorySegment {
