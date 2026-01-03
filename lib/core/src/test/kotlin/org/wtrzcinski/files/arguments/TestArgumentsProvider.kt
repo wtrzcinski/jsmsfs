@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,9 @@ import org.junit.jupiter.params.provider.ArgumentsProvider
 import org.junit.jupiter.params.support.ParameterDeclarations
 import org.wtrzcinski.files.Fixtures
 import org.wtrzcinski.files.memory.allocator.MemoryScopeType
+import org.wtrzcinski.files.memory.provider.MemoryFileSystemProvider.Companion.Capacity
+import org.wtrzcinski.files.memory.provider.MemoryFileSystemProvider.Companion.MaxBlockSize
+import org.wtrzcinski.files.memory.provider.MemoryFileSystemProvider.Companion.Scope
 import java.net.URI
 import java.nio.file.FileSystems
 import java.nio.file.Files
@@ -43,11 +46,11 @@ class TestArgumentsProvider : ArgumentsProvider {
                         newMemoryFileSystem(
                             name = "jsmsfs:///?scope=$it",
                             env = mapOf(
-                                "scope" to it,
+                                Scope to it,
+                                Capacity to capacity,
+                                MaxBlockSize to blockSize,
                                 "options" to "DELETE_ON_CLOSE, SPARSE",
                                 "path" to tempFile,
-                                "capacity" to capacity,
-                                "blockSize" to blockSize,
                             )
                         )
                     )
@@ -57,9 +60,9 @@ class TestArgumentsProvider : ArgumentsProvider {
                         newMemoryFileSystem(
                             name = "jsmsfs:///?scope=$it",
                             env = mapOf(
-                                "scope" to it,
-                                "capacity" to capacity,
-                                "blockSize" to blockSize,
+                                Scope to it,
+                                Capacity to capacity,
+                                MaxBlockSize to blockSize,
                             )
                         )
                     )

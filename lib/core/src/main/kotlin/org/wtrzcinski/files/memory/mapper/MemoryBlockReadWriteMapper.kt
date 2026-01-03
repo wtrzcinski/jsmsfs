@@ -16,57 +16,30 @@
 
 package org.wtrzcinski.files.memory.mapper
 
-import org.wtrzcinski.files.memory.MemorySegmentLedger
 import org.wtrzcinski.files.memory.address.Block
-import org.wtrzcinski.files.memory.address.BlockStart
+import org.wtrzcinski.files.memory.address.BlockOffset
 import org.wtrzcinski.files.memory.address.ByteSize
-import org.wtrzcinski.files.memory.buffer.chunk.ChunkReadWriteBuffer
-import org.wtrzcinski.files.memory.util.HistoricalLog
+import org.wtrzcinski.files.memory.buffer.BufferAllocator
+import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
 class MemoryBlockReadWriteMapper(
-    val memory: MemorySegmentLedger,
-    override val start: Long,
+    val memory: BufferAllocator,
+    private val offset: BlockOffset,
     private val header: MemoryHeaderMapper,
-    val body: ChunkReadWriteBuffer,
+    val body: MemoryReadWriteBuffer,
 ) : Block {
 
-    companion object {
-        fun newBlock(memory: MemorySegmentLedger, offset: BlockStart, bodySize: ByteSize): MemoryBlockReadWriteMapper {
-            val header = MemoryHeaderMapper.newHeader(memory = memory, offset = offset, bodySize = bodySize)
-            val body = memory.directBuffer(start = offset + header.size, size = header.readBodySize)
-            return MemoryBlockReadWriteMapper(
-                memory = memory,
-                start = offset.start,
-                header = header,
-                body = body,
-            )
-        }
+    override val start: Long get() = offset.start
 
-        fun existingBlock(memory: MemorySegmentLedger, offset: BlockStart): MemoryBlockReadWriteMapper {
-            val header = MemoryHeaderMapper.existingHeader(memory = memory, offset = offset)
-            val bodySize = header.readBodySize
-            val body = memory.directBuffer(start = offset + header.size, size = bodySize)
-            return MemoryBlockReadWriteMapper(
-                memory = memory,
-                start = offset.start,
-                header = header,
-                body = body,
-            )
-        }
-    }
-
-    override val size: Long
-        get() {
-            return (readBodySize() + memory.headerBytes).size
-        }
+    override val size: Long get() = (readBodySize() + header.size).size
 
     fun readBodySize(): ByteSize {
         return header.readBodySize
     }
 
-    fun readNextOffset(): BlockStart? {
+    fun readNextOffset(): BlockOffset? {
         return header.readNextOffset
     }
 
@@ -75,27 +48,25 @@ class MemoryBlockReadWriteMapper(
         byteBuffer.clear()
         val prevValue = byteBuffer.readSize()
         if (prevValue != newValue) {
-            val divide = this.div(newSize = newValue + memory.headerBytes)
+            val divide = this.div(newSize = newValue + header.size)
 
-            HistoricalLog.debug(this) { "writeBodySizeAndTruncate ${divide.first}, ${divide.second}" }
-
-            memory.release(block = divide.second)
+            memory.releaseOne(block = divide.second)
 
             byteBuffer.clear()
             byteBuffer.writeSize(value = newValue)
 
-            body.limit(newValue)
+            body.truncate(newValue.size)
         }
     }
 
-    fun writeNextOffsetAndRelease(newValue: BlockStart) {
+    fun writeNextOffsetAndRelease(newValue: BlockOffset) {
         val byteBuffer = header.nextOffsetBuffer
         byteBuffer.clear()
         val prevValue = byteBuffer.readOffset()
         byteBuffer.clear()
         if (prevValue != newValue) {
             if (prevValue != null && prevValue.isValid()) {
-                memory.release(offset = prevValue)
+                memory.releaseAll(offset = prevValue)
             }
 
             byteBuffer.clear()
@@ -105,8 +76,8 @@ class MemoryBlockReadWriteMapper(
 
     override fun toString(): String {
         val next = readNextOffset()?.start
-        val headerSize = memory.headerBytes
+        val headerSize = header.size
         val bodySize = readBodySize()
-        return "${javaClass.simpleName}(start=$start, end=$end, size=$size, headerSize=$headerSize, bodySize=$bodySize, next=$next)"
+        return "${javaClass.simpleName}(start=$start, end=$endExclusive, size=$size, headerSize=$headerSize, bodySize=$bodySize, next=$next)"
     }
 }

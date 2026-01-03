@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@
 package org.wtrzcinski.files.memory.bitmap
 
 import org.wtrzcinski.files.memory.address.Block
-import org.wtrzcinski.files.memory.address.BlockStart
 import org.wtrzcinski.files.memory.address.ByteSize
 import org.wtrzcinski.files.memory.lock.MemoryLockRegistry
 import org.wtrzcinski.files.memory.mode.Mode
@@ -32,7 +31,7 @@ interface BitmapRegistry {
 
     fun isReadOnly(): Boolean
 
-    fun allocate(name: String, minBlockSize: ByteSize, maxBlockSize: ByteSize, prev: BlockStart): BitmapEntry
+    fun allocate(name: String, minBlockSize: ByteSize, maxBlockSize: ByteSize, prev: BitmapEntry): BitmapEntry
 
     fun release(block: Block)
 
@@ -41,13 +40,15 @@ interface BitmapRegistry {
             memoryOffset: Long,
             memorySize: ByteSize,
             readOnly: Boolean,
-            lockRegistry: MemoryLockRegistry
+            locks: MemoryLockRegistry,
+            compact: Boolean,
         ): BitmapRegistryGroup {
             return BitmapRegistryGroup(
                 offset = memoryOffset,
                 totalByteSize = memorySize,
-                locks = lockRegistry,
+                locks = locks,
                 mode = Mode.of(readOnly),
+                compact = compact,
             )
         }
     }

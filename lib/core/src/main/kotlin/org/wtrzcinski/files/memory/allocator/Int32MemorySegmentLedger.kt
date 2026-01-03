@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,43 +17,29 @@
 package org.wtrzcinski.files.memory.allocator
 
 import org.wtrzcinski.files.memory.MemorySegmentLedger
-import org.wtrzcinski.files.memory.address.BlockStart
+import org.wtrzcinski.files.memory.address.BlockOffset
 import org.wtrzcinski.files.memory.address.ByteSize
 import org.wtrzcinski.files.memory.bitmap.BitmapRegistry
-import org.wtrzcinski.files.memory.buffer.chunk.ChunkReadWriteBuffer
-import org.wtrzcinski.files.memory.buffer.chunk.IntReadWriteBuffer
+import org.wtrzcinski.files.memory.buffer.ContinuousReadWriteBuffer
+import org.wtrzcinski.files.memory.buffer.IntContinuousReadWriteBuffer
 import org.wtrzcinski.files.memory.mapper.MemoryMapperRegistry.Companion.intByteSize
-import org.wtrzcinski.files.memory.util.Check
 import java.lang.foreign.MemorySegment
 
-internal class IntMemoryLedger(
+internal class Int32MemorySegmentLedger(
     memory: MemorySegment,
     bitmap: BitmapRegistry,
     maxBlockByteSize: ByteSize,
 ) : MemorySegmentLedger(
     memory = memory,
     bitmap = bitmap,
-    maxBlockSize = maxBlockByteSize
+    maxBlockSize = maxBlockByteSize,
+    sizeBytes = intByteSize,
+    offsetBytes = intByteSize,
 ) {
-    companion object {
-        //        -1L is reserved for invalid references
-        val MaxUnsignedIntInclusive: Long = Integer.toUnsignedLong(-1) - 1L
+
+    override fun continuousBuffer(address: BlockOffset, start: BlockOffset, size: ByteSize): ContinuousReadWriteBuffer {
+        val asSlice: MemorySegment = memory.asSlice(start.start, size.size)
+        return IntContinuousReadWriteBuffer(memorySegment = asSlice, address = address, release = { this.releaseAll(it.flip()) })
     }
 
-    override val sizeBytes: ByteSize = intByteSize
-
-    override val offsetBytes: ByteSize = intByteSize
-
-    init {
-        Check.isTrue { maxBlockByteSize >= headerBytes }
-    }
-
-    override fun directBuffer(start: BlockStart, size: ByteSize): ChunkReadWriteBuffer {
-        try {
-            val asSlice: MemorySegment = this@IntMemoryLedger.memory.asSlice(start.start, size.size)
-            return IntReadWriteBuffer(memorySegment = asSlice, release = { this.release(it.flip()) })
-        } catch (e: IndexOutOfBoundsException) {
-            throw e
-        }
-    }
 }

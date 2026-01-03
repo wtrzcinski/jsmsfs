@@ -24,7 +24,7 @@ import java.time.Instant
 
 class FragmentedReadWriteBufferTest {
     companion object {
-        private val context = MemorySegmentContext(capacity = ByteSize.readSize("4mb"))
+        private val context = MemorySegmentContext(capacity = ByteSize.readSize("4mb"), compact = false)
 
         val ledger = context.ledger
     }
@@ -32,7 +32,7 @@ class FragmentedReadWriteBufferTest {
     @Test
     fun `should flip buffer`() {
         val instants = (0..<1024 * 128).map { Instant.now() }
-        val tmpBuffer = ledger.newBuffer(bodyAlignment = ByteSize(29))
+        val tmpBuffer = ledger.allocateChannel(bodyAlignment = ByteSize(29))
         instants.forEach {
             tmpBuffer.writeInstant(it)
         }
@@ -40,8 +40,8 @@ class FragmentedReadWriteBufferTest {
 
         tmpBuffer.flip()
         val bodySize = tmpBuffer.remaining()
-        val directBuffer = ledger.newBuffer(bodyAlignment = bodySize)
-        directBuffer.write(value = tmpBuffer)
+        val directBuffer = ledger.allocateChannel(bodyAlignment = bodySize)
+        directBuffer.write(source = tmpBuffer)
         directBuffer.flip()
 
         instants.forEach {

@@ -16,7 +16,7 @@
 
 package org.wtrzcinski.files.memory.path
 
-import org.wtrzcinski.files.memory.address.BlockStart
+import org.wtrzcinski.files.memory.address.BlockOffset
 import org.wtrzcinski.files.memory.node.DirectoryNode
 import org.wtrzcinski.files.memory.node.ValidNode
 import org.wtrzcinski.files.memory.provider.MemoryFileSystem
@@ -25,7 +25,7 @@ import java.nio.file.Path
 
 class HardFilePath(
     fs: MemoryFileSystem,
-    val nodeRef: BlockStart,
+    val nodeRef: BlockOffset,
     private val parent: HardFilePath?,
 ) : AbstractFilePath(fs) {
 

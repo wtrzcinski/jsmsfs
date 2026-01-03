@@ -26,7 +26,7 @@ class BitmapEntry(
 ) : DefaultBlock(
     start = start,
     size = size,
-    end = start + size
+    endExclusive = start + size
 ) {
 
     constructor(block: Block): this(start = block.start, size = block.size)
@@ -61,6 +61,6 @@ class BitmapEntry(
     }
 
     override fun toString(): String {
-        return "${javaClass.simpleName}(start=$start, end=$end, size=$size)"
+        return "${javaClass.simpleName}(start=$start, end=$endExclusive, size=$size)"
     }
 }

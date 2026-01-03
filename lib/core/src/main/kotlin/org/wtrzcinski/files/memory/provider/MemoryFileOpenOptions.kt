@@ -52,8 +52,10 @@ data class MemoryFileOpenOptions(val options: Set<OpenOption>) {
                 WriteMode.RequireNew
             } else if (append) {
                 WriteMode.AppendToExisting
-            } else {
+            } else if(readWrite) {
                 WriteMode.TruncateExisting
+            } else {
+                WriteMode.RequireExisting
             }
             return Mode(
                 open = openMode,
@@ -73,8 +75,16 @@ data class MemoryFileOpenOptions(val options: Set<OpenOption>) {
         options.contains(StandardOpenOption.CREATE_NEW)
     }
 
+    val read: Boolean by lazy {
+        options.isEmpty() || options.contains(StandardOpenOption.READ) || options.contains(StandardOpenOption.WRITE)
+    }
+
     val readWrite: Boolean by lazy {
         options.contains(StandardOpenOption.WRITE)
+    }
+
+    val readOnly: Boolean by lazy {
+        (options.isEmpty() || options.contains(StandardOpenOption.READ)) && !options.contains(StandardOpenOption.WRITE)
     }
 
     val append: Boolean by lazy {
@@ -84,9 +94,5 @@ data class MemoryFileOpenOptions(val options: Set<OpenOption>) {
 
     val truncate: Boolean by lazy {
         options.contains(StandardOpenOption.TRUNCATE_EXISTING) || !options.contains(StandardOpenOption.APPEND)
-    }
-
-    val read: Boolean by lazy {
-        options.isEmpty() || options.contains(StandardOpenOption.READ) || options.contains(StandardOpenOption.WRITE)
     }
 }

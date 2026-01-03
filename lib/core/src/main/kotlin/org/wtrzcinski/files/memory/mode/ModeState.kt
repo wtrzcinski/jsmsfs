@@ -24,8 +24,8 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
 @Suppress("unused")
-open class AbstractCloseable(
-    mode: Mode = Mode.readWrite(),
+open class ModeState(
+    mode: Mode = Mode.createRead(),
 ) : Closeable {
 
     private val openModeAtomic = AtomicReference(mode.open)
@@ -68,7 +68,7 @@ open class AbstractCloseable(
         }
     }
 
-    protected fun tryRelease(): Boolean {
+    fun tryRelease(): Boolean {
         tryFlip()
         tryClose()
         return moveMode(prevValue = OpenMode.Close, nextValue = OpenMode.Release)
@@ -79,7 +79,7 @@ open class AbstractCloseable(
         return moveMode(prevValue = OpenMode.ReadOnly, nextValue = OpenMode.Close)
     }
 
-    protected fun tryFlip(): Boolean {
+    fun tryFlip(): Boolean {
         return moveMode(prevValue = OpenMode.ReadWrite, nextValue = OpenMode.ReadOnly)
     }
 
@@ -89,33 +89,39 @@ open class AbstractCloseable(
         return openModeAtomic.compareAndSet(expectedValue = prevValue, newValue = nextValue)
     }
 
-    protected fun checkIsOpen() {
+    fun checkIsOpen() {
         if (!isOpen()) {
             throwIllegalStateException()
         }
     }
 
-    protected fun checkIsClosed() {
+    fun checkIsClosed() {
         if (!isClosed()) {
             throwIllegalStateException()
         }
     }
 
-    protected fun checkIsWritable() {
+    fun checkIsWritable() {
         checkIsOpen()
         if (!isWritable()) {
             throwIllegalStateException()
         }
     }
 
-    protected fun checkIsReadable() {
+    fun checkIsReadable() {
         checkIsOpen()
         if (!isReadable()) {
             throwIllegalStateException()
         }
     }
 
-    protected fun throwIllegalStateException(): Nothing {
+    fun checkNotReleased() {
+        if (isReleased()) {
+            throwIllegalStateException()
+        }
+    }
+
+    fun throwIllegalStateException(): Nothing {
         throw MemoryIllegalStateException()
     }
 }

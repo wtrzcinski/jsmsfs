@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,18 +23,26 @@ data class Mode(
 ) {
     companion object {
         fun readOnly(): Mode {
-            return of(true)
+            return of(existing = false, readOnly = true)
         }
 
-        fun readWrite(): Mode {
-            return of(false)
+        fun createRead(): Mode {
+            return of(existing = false, readOnly = false)
         }
 
-        fun of(readOnly: Boolean): Mode {
+        fun updateRead(): Mode {
+            return of(existing = true, readOnly = false)
+        }
+
+        fun of(readOnly: Boolean, existing: Boolean = false): Mode {
             return if (readOnly) {
-                Mode(OpenMode.ReadOnly, WriteMode.UseExisting, ReadMode.Block)
+                Mode(OpenMode.ReadOnly, WriteMode.RequireExisting, ReadMode.Block)
             } else {
-                Mode(OpenMode.ReadWrite, WriteMode.RequireNew, ReadMode.Block)
+                if (existing) {
+                    Mode(OpenMode.ReadWrite, WriteMode.RequireExisting, ReadMode.Block)
+                } else {
+                    Mode(OpenMode.ReadWrite, WriteMode.RequireNew, ReadMode.Block)
+                }
             }
         }
     }

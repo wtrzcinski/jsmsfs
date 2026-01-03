@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,26 +20,44 @@ import org.wtrzcinski.files.memory.MemorySegmentLedger
 import org.wtrzcinski.files.memory.address.ByteSize
 import org.wtrzcinski.files.memory.mode.Mode
 import org.wtrzcinski.files.memory.node.AttributesBlock
+import org.wtrzcinski.files.memory.schema.MapperSchema
 import java.time.Instant
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
 class MemoryMapperRegistry(val memory: MemorySegmentLedger) {
+
     companion object {
         val intByteSize: ByteSize = ByteSize(value = Int.SIZE_BYTES.toLong())
         val longByteSize: ByteSize = ByteSize(value = Long.SIZE_BYTES.toLong())
         val instantByteSize: ByteSize = longByteSize + intByteSize
     }
 
-    fun createName(name: String): NameMapper {
-        val nameMapper = NameMapper(memory = memory)
+    private val nodeSchema = MapperSchema.builder()
+        .field(name = "type", size = intByteSize)
+        .field(name = "data", size = memory.offsetBytes)
+        .field(name = "attrs", size = memory.offsetBytes)
+        .field(name = "name", size = memory.offsetBytes)
+        .build()
+
+    private val attrsSchema = MapperSchema.builder()
+        .field("lastAccessTime", size = instantByteSize)
+        .field("lastModifiedTime", size = instantByteSize)
+        .field("creationTime", size = instantByteSize)
+        .field("permissions", size = intByteSize + ByteSize(9))
+        .field("owner", minSize = intByteSize, maxSize = intByteSize + ByteSize(100 * 2))
+        .field("group", minSize = intByteSize, maxSize = intByteSize + ByteSize(100 * 2))
+        .build()
+
+    fun createString(name: String): StringMapper {
+        val nameMapper = StringMapper(memory = memory)
         nameMapper.writeName(name)
         return nameMapper
     }
 
-    fun createAttrs(name: String): AttrsMapper {
+    fun createAttrs(): AttrsMapper {
         val attrs = AttributesBlock(now = Instant.now())
-        val attrsMapper = AttrsMapper(memory = memory, name = name)
+        val attrsMapper = AttrsMapper(memory = memory, mode = Mode.createRead(), schema = attrsSchema)
         attrsMapper.writeLastAccessTime(attrs.lastAccessTime)
         attrsMapper.writeLastModifiedTime(attrs.lastModifiedTime)
         attrsMapper.writeCreationTime(attrs.creationTime)
@@ -49,8 +67,12 @@ class MemoryMapperRegistry(val memory: MemorySegmentLedger) {
         return attrsMapper
     }
 
-    fun createFile(name: String): NodeMapper {
-        val result = NodeMapper(memory = memory, name = name, mode = Mode.readWrite())
-        return result
+    fun createFile(): NodeMapper {
+        val buffer = memory.allocateChannel(bodySize = nodeSchema.bodySize())
+        return NodeMapper(
+            mode = Mode.createRead(),
+            schema = nodeSchema,
+            buffer = buffer,
+        )
     }
 }

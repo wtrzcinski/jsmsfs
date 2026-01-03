@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,49 +14,61 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.buffer.chunk
+package org.wtrzcinski.files.memory.buffer
 
-import org.wtrzcinski.files.memory.address.BlockStart
+import org.wtrzcinski.files.memory.address.Block
+import org.wtrzcinski.files.memory.address.BlockOffset
 import org.wtrzcinski.files.memory.address.ByteSize
-import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer
 import org.wtrzcinski.files.memory.mapper.MemoryMapperRegistry
 import org.wtrzcinski.files.memory.util.Check
 import java.lang.foreign.MemorySegment
 
-internal class IntReadWriteBuffer(
+class IntContinuousReadWriteBuffer(
     memorySegment: MemorySegment,
-    release: (ChunkReadWriteBuffer) -> Unit = {},
-) : ChunkReadWriteBuffer(
+    address: BlockOffset = BlockOffset(memorySegment.address()),
+    close: (MemoryReadWriteBuffer) -> Unit = {},
+    release: (MemoryReadWriteBuffer) -> Unit = {},
+) : ContinuousReadWriteBuffer(
     memorySegment = memorySegment,
+    address = address,
     byteBuffer = memorySegment.asByteBuffer(),
+    close = close,
     release = release,
 ) {
 
-    override val offsetBytes: ByteSize get() = MemoryMapperRegistry.Companion.intByteSize
+    override val offsetBytes: ByteSize get() = MemoryMapperRegistry.intByteSize
 
-    override fun readOffset(): BlockStart? {
-        val value = readUnsignedInt() ?: return null
-        Check.isTrue { value >= 0 }
-        return BlockStart.Companion(value)
+    override val sizeBytes: ByteSize get() = MemoryMapperRegistry.intByteSize
+
+    override fun onClose(close: (MemoryReadWriteBuffer) -> Unit): MemoryReadWriteBuffer {
+        return IntContinuousReadWriteBuffer(memorySegment, address, close, release)
     }
 
-    override fun writeOffset(value: BlockStart) {
+    override fun readOffset(): BlockOffset? {
+        val value = readUnsignedInt() ?: return null
+        Check.isTrue { value >= 0 }
+        return BlockOffset.Companion(value)
+    }
+
+    override fun writeOffset(value: BlockOffset): MemoryReadWriteBuffer {
         if (!value.isValid()) {
-            writeInt(MemoryReadWriteBuffer.Companion.InvalidRef.toInt())
+            writeInt(Block.InvalidRef.toInt())
         } else {
             Check.isTrue { value.start >= 0 }
             writeUnsignedInt(value.start)
         }
+        return this
     }
 
     override fun readSize(): ByteSize {
-        val value = readUnsignedInt() ?: return ByteSize.Companion.InvalidSize
+        val value = readUnsignedInt() ?: return ByteSize.InvalidSize
         Check.isTrue { value >= 0 }
         return ByteSize(value)
     }
 
-    override fun writeSize(value: ByteSize) {
+    override fun writeSize(value: ByteSize): MemoryReadWriteBuffer {
         Check.isTrue { value.size >= 0 }
         writeUnsignedInt(value.size)
+        return this
     }
 }

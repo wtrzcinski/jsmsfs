@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,9 @@
 
 package org.wtrzcinski.files.memory.address
 
-class DefaultBlockStart(override val start: Long) : BlockStart {
+class DefaultBlockOffset(override val start: Long) : BlockOffset {
 
-    constructor(other: BlockStart): this(other.start)
+    constructor(other: BlockOffset): this(other.start)
 
     override fun toString(): String {
         return "${javaClass.simpleName}(start=$start)"
@@ -28,7 +28,7 @@ class DefaultBlockStart(override val start: Long) : BlockStart {
         if (this === other) {
             return true
         }
-        if (other !is BlockStart) {
+        if (other !is BlockOffset) {
             return false
         }
         return start == other.start

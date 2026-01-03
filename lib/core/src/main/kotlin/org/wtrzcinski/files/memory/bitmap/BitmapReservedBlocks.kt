@@ -38,14 +38,14 @@ class BitmapReservedBlocks {
 
     fun add(other: BitmapEntry): BitmapEntry {
         this.byStartOffset[other.start] = other
-        this.byEndOffset[other.end] = other
+        this.byEndOffset[other.endExclusive] = other
         this.reservedSize += other.size
         return other
     }
 
     fun remove(other: BitmapEntry) {
         checkNotNull(this.byStartOffset.remove(other.start))
-        checkNotNull(this.byEndOffset.remove(other.end))
+        checkNotNull(this.byEndOffset.remove(other.endExclusive))
         this.reservedSize -= other.size
     }
 }

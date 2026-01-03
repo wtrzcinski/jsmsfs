@@ -41,23 +41,4 @@ object Check {
             checkNotNull(block())
         }
     }
-
-    inline fun areInOrder(block: () -> Pair<Number, Number>) {
-        if (defensive) {
-            val block1 = block()
-            check(block1.first.toDouble() <= block1.second.toDouble())
-        }
-    }
-
-    inline fun areInOrder3(block: () -> Pair<Pair<Number, Number>, Number>) {
-        if (defensive) {
-            val invoke = block()
-
-            val first = invoke.first
-            val second = invoke.second
-
-            areInOrder { first }
-            areInOrder { first.second to second }
-        }
-    }
 }

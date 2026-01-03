@@ -16,7 +16,8 @@
 
 package org.wtrzcinski.files.memory.provider
 
-import org.wtrzcinski.files.memory.buffer.channel.FragmentedReadWriteBuffer
+import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer
+import org.wtrzcinski.files.memory.buffer.FragmentedReadWriteBuffer
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.nio.ByteBuffer
@@ -26,7 +27,7 @@ import java.nio.channels.FileLock
 import java.nio.channels.ReadableByteChannel
 import java.nio.channels.WritableByteChannel
 
-internal class MemoryFileChannel(private val delegate: FragmentedReadWriteBuffer) : FileChannel() {
+internal class MemoryFileChannel(private val delegate: MemoryReadWriteBuffer) : FileChannel() {
 
     //    seekable byte channel
     override fun read(dst: ByteBuffer): Int {

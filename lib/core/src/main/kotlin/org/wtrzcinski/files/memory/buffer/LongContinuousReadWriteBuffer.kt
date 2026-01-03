@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,41 +14,52 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.buffer.chunk
+package org.wtrzcinski.files.memory.buffer
 
-import org.wtrzcinski.files.memory.address.BlockStart
+import org.wtrzcinski.files.memory.address.Block
+import org.wtrzcinski.files.memory.address.BlockOffset
 import org.wtrzcinski.files.memory.address.ByteSize
-import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer
 import org.wtrzcinski.files.memory.mapper.MemoryMapperRegistry
 import java.lang.foreign.MemorySegment
 
-internal class LongReadWriteBuffer(
+internal class LongContinuousReadWriteBuffer(
     memorySegment: MemorySegment,
-    release: (ChunkReadWriteBuffer) -> Unit = {},
-) : ChunkReadWriteBuffer(
+    address: BlockOffset,
+    close: (MemoryReadWriteBuffer) -> Unit = {},
+    release: (MemoryReadWriteBuffer) -> Unit = {},
+) : ContinuousReadWriteBuffer(
     memorySegment = memorySegment,
+    address = address,
     byteBuffer = memorySegment.asByteBuffer(),
+    close = close,
     release = release,
 ) {
 
-    override val offsetBytes: ByteSize get() = MemoryMapperRegistry.Companion.longByteSize
+    override val offsetBytes: ByteSize get() = MemoryMapperRegistry.longByteSize
 
-    override fun readOffset(): BlockStart? {
+    override val sizeBytes: ByteSize get() = MemoryMapperRegistry.longByteSize
+
+    override fun onClose(close: (MemoryReadWriteBuffer) -> Unit): MemoryReadWriteBuffer {
+        return LongContinuousReadWriteBuffer(memorySegment, this@LongContinuousReadWriteBuffer.address, close, release)
+    }
+
+    override fun readOffset(): BlockOffset? {
         val value = readLong()
-        if (value == MemoryReadWriteBuffer.Companion.InvalidRef) {
+        if (value == Block.InvalidRef) {
             return null
         }
         require(value >= 0)
-        return BlockStart.Companion(value)
+        return BlockOffset.Companion(value)
     }
 
-    override fun writeOffset(value: BlockStart) {
+    override fun writeOffset(value: BlockOffset): MemoryReadWriteBuffer {
         if (!value.isValid()) {
-            writeLong(MemoryReadWriteBuffer.Companion.InvalidRef)
+            writeLong(Block.InvalidRef)
         } else {
             require(value.start >= 0)
             writeLong(value.start)
         }
+        return this
     }
 
     override fun readSize(): ByteSize {
@@ -57,8 +68,9 @@ internal class LongReadWriteBuffer(
         return ByteSize(value)
     }
 
-    override fun writeSize(value: ByteSize) {
+    override fun writeSize(value: ByteSize): MemoryReadWriteBuffer {
         require(value.size >= 0)
         writeLong(value.size)
+        return this
     }
 }

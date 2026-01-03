@@ -52,7 +52,7 @@ internal class MemorySecureDirectoryStream(
         provider.delete(absolutePath)
     }
 
-    override fun move(srcpath: Path?, targetdir: SecureDirectoryStream<Path>, targetpath: Path?) {
+    override fun move(srcpath: Path, targetdir: SecureDirectoryStream<Path>, targetpath: Path) {
         TODO("Not yet implemented")
     }
 

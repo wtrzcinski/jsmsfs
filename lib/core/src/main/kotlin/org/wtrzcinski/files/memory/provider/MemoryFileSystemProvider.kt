@@ -20,11 +20,12 @@ import org.wtrzcinski.files.memory.MemorySegmentContext
 import org.wtrzcinski.files.memory.MemorySegmentFileSystem
 import org.wtrzcinski.files.memory.address.ByteSize
 import org.wtrzcinski.files.memory.allocator.MemoryScopeType
-import org.wtrzcinski.files.memory.buffer.channel.FragmentedReadWriteBuffer
+import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer
 import org.wtrzcinski.files.memory.exception.MemoryUnsupportedOperationException
+import org.wtrzcinski.files.memory.mode.ModeState
 import org.wtrzcinski.files.memory.node.DirectoryNode
-import org.wtrzcinski.files.memory.node.NodeType.Directory
-import org.wtrzcinski.files.memory.node.NodeType.SymbolicLink
+import org.wtrzcinski.files.memory.node.NodeType.Companion.Directory
+import org.wtrzcinski.files.memory.node.NodeType.Companion.SymbolicLink
 import org.wtrzcinski.files.memory.node.RegularFileNode
 import org.wtrzcinski.files.memory.node.SymbolicLinkNode
 import org.wtrzcinski.files.memory.path.AbstractFilePath
@@ -42,7 +43,6 @@ import java.nio.file.attribute.*
 import java.nio.file.spi.FileSystemProvider
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
-import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.use
 
@@ -53,14 +53,18 @@ class MemoryFileSystemProvider(
 ) : FileSystemProvider(), AutoCloseable {
 
     companion object {
+        val Scope = "scope"
+        val Capacity = "capacity"
+        val MaxBlockSize = "maxBlockSize"
+
         private val filesystems = ConcurrentHashMap<String, MemoryFileSystem>()
 
         @Synchronized
         fun newFileSystem(uri: URI, env: Map<String, *>): MemoryFileSystem {
             synchronized(filesystems) {
-                val capacity: ByteSize = ByteSize.readSize(env["capacity"]) ?: throw IllegalArgumentException("Missing capacity parameter")
-                val blockSize: ByteSize = ByteSize.readSize(env["blockSize"]?.toString()) ?: ByteSize(1024 * 4)
-                val scope: MemoryScopeType = env["scope"]?.toString()?.uppercase()?.let { MemoryScopeType.valueOf(it) } ?: MemoryScopeType.DEFAULT
+                val capacity: ByteSize = ByteSize.readSize(env[Capacity]) ?: throw IllegalArgumentException("Missing capacity parameter")
+                val blockSize: ByteSize = ByteSize.readSize(env[MaxBlockSize]?.toString()) ?: MemorySegmentContext.DefaultBlockSize
+                val scope: MemoryScopeType = env[Scope]?.toString()?.uppercase()?.let { MemoryScopeType.valueOf(it) } ?: MemoryScopeType.DEFAULT
 
                 val rawQuery = uri.rawQuery ?: ""
                 val context = MemorySegmentContext(
@@ -92,10 +96,10 @@ class MemoryFileSystemProvider(
         }
     }
 
-    private val closed = AtomicBoolean(false)
+    private val monitor = ModeState()
 
     override fun close() {
-        if (closed.compareAndSet(false, true)) {
+        if (monitor.tryClose()) {
             fileSystem?.close()
         }
     }
@@ -112,7 +116,11 @@ class MemoryFileSystemProvider(
         return Companion.getFileSystem(uri)
     }
 
-    override fun newByteChannel(child: Path, options: Set<OpenOption>, vararg attrs: FileAttribute<*>): FragmentedReadWriteBuffer {
+    override fun newByteChannel(
+        child: Path,
+        options: Set<OpenOption>,
+        vararg attrs: FileAttribute<*>
+    ): MemoryReadWriteBuffer {
         require(child is AbstractFilePath)
         checkNotNull(fileSystem)
 
@@ -128,8 +136,8 @@ class MemoryFileSystemProvider(
         return MemoryFileChannel(delegate = newByteChannel(path, options, *attrs))
     }
 
-    override fun newAsynchronousFileChannel(path: Path?, options: Set<OpenOption>, executor: ExecutorService, vararg attrs: FileAttribute<*>): AsynchronousFileChannel? {
-        Require.todo()
+    override fun newAsynchronousFileChannel(path: Path, options: Set<OpenOption>, executor: ExecutorService, vararg attrs: FileAttribute<*>): AsynchronousFileChannel {
+        Require.unsupported()
     }
 
     override fun createDirectory(path: Path, vararg attrs: FileAttribute<*>) {
@@ -158,8 +166,8 @@ class MemoryFileSystemProvider(
         }
     }
 
-    override fun createLink(link: Path?, existing: Path?) {
-        super.createLink(link, existing)
+    override fun createLink(link: Path, existing: Path) {
+        Require.unsupported()
     }
 
     override fun createSymbolicLink(path: Path, target: Path, vararg attrs: FileAttribute<*>) {

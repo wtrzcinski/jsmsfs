@@ -16,16 +16,15 @@
 
 package org.wtrzcinski.files.memory
 
-import org.wtrzcinski.files.memory.address.BlockStart
-import org.wtrzcinski.files.memory.buffer.channel.FragmentedReadWriteBuffer
+import org.wtrzcinski.files.memory.address.BlockOffset
+import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer
 import org.wtrzcinski.files.memory.exception.MemoryIllegalArgumentException
 import org.wtrzcinski.files.memory.lock.MemoryFileLock.Companion.use
 import org.wtrzcinski.files.memory.mapper.MemoryMapperRegistry.Companion.intByteSize
-import org.wtrzcinski.files.memory.mode.AbstractCloseable
 import org.wtrzcinski.files.memory.mode.Mode
+import org.wtrzcinski.files.memory.mode.ModeState
 import org.wtrzcinski.files.memory.node.*
 import org.wtrzcinski.files.memory.provider.MemoryFileOpenOptions
-import org.wtrzcinski.files.memory.provider.MemoryFileOpenOptions.Companion.READ
 import org.wtrzcinski.files.memory.provider.MemoryFileOpenOptions.Companion.WRITE_TRUNCATE
 import org.wtrzcinski.files.memory.util.Check
 import org.wtrzcinski.files.memory.util.Require
@@ -45,7 +44,7 @@ import kotlin.reflect.full.isSuperclassOf
 class MemorySegmentFileSystem(
     val context: MemorySegmentContext,
     name: String = "",
-) : AutoCloseable, AbstractCloseable(
+) : AutoCloseable, ModeState(
     mode = Mode.of(readOnly = context.ledger.memory.isReadOnly())
 ) {
 
@@ -59,13 +58,14 @@ class MemorySegmentFileSystem(
         }
     }
 
-    val rootRef: BlockStart = run {
-        getOrCreateFile(
+    val rootRef: BlockOffset = run {
+        val ref = getOrCreateFile(
             parent = null,
             childType = NodeType.Directory,
             childName = File.separator,
             mode = MemoryFileOpenOptions.REQUIRE_NEW,
         )
+        ref
     }
 
     fun root(): DirectoryNode {
@@ -76,7 +76,7 @@ class MemorySegmentFileSystem(
         parent: DirectoryNode,
         childName: String,
         mode: MemoryFileOpenOptions
-    ): FragmentedReadWriteBuffer {
+    ): MemoryReadWriteBuffer {
         checkIsWritable()
 
         val child = getOrCreateFile(
@@ -86,7 +86,7 @@ class MemorySegmentFileSystem(
             mode = mode,
         )
 
-        var dataSegmentRef: BlockStart? = readDataOffset(child)
+        var dataSegmentRef: BlockOffset? = readDataOffset(child)
 
         val childLock = context.locks.newLock(offset = child, mode = mode)
         childLock.acquire()
@@ -96,21 +96,19 @@ class MemorySegmentFileSystem(
                 if (dataSegmentRef == null) {
                     Check.isTrue { mode.readWrite }
 
-                    val dataSegment = context.ledger.newBuffer(name = "$childName.data", lock = childLock)
-                    updateDataOffset(nodeRef = child, newDataRef = dataSegment.first())
+                    val dataSegment = context.ledger.allocateChannel(lock = childLock)
+                    updateDataOffset(nodeRef = child, newDataRef = dataSegment.address())
                     return dataSegment
                 } else {
-                    return context.ledger.existingBuffer(
-                        name = "$childName.data",
-                        mode = mode,
+                    return context.ledger.existingChannel(
+                        mode = mode.mode,
                         offset = dataSegmentRef,
                         lock = childLock
                     )
                 }
             } else {
-                return context.ledger.existingBuffer(
-                    name = "$childName.data",
-                    mode = mode,
+                return context.ledger.existingChannel(
+                    mode = mode.mode,
                     offset = dataSegmentRef,
                     lock = childLock
                 )
@@ -128,7 +126,7 @@ class MemorySegmentFileSystem(
         childName: String,
         mode: MemoryFileOpenOptions,
         targetNode: ValidNode? = null,
-    ): BlockStart {
+    ): BlockOffset {
         checkIsWritable()
 
         Require.notEmpty(childName)
@@ -154,28 +152,31 @@ class MemorySegmentFileSystem(
         }
     }
 
-    private fun createFile(name: String, type: NodeType, target: ValidNode? = null, parent: DirectoryNode? = null): BlockStart {
-        val nameMapper = context.mappers.createName(name)
+    private fun createFile(name: String, type: NodeType, target: ValidNode? = null, parent: DirectoryNode? = null): BlockOffset {
+        val nameMapper = context.mappers.createString(name)
         val nameOffset = nameMapper.flip()
+        nameMapper.close()
 
-        val attrsMapper = context.mappers.createAttrs(name = "$name.attrs")
+        val attrsMapper = context.mappers.createAttrs()
         val attrsOffset = attrsMapper.flip()
+        attrsMapper.close()
 
-        val nodeMapper = context.mappers.createFile(name = name)
+        val nodeMapper = context.mappers.createFile()
         nodeMapper.writeType(type)
         if (target != null) {
             val dataOffset = readDataOffset(target.offset)
             if (dataOffset != null) {
                 nodeMapper.writeDataOffset(dataOffset)
             } else {
-                nodeMapper.writeDataOffset(BlockStart.InvalidAddress)
+                nodeMapper.writeDataOffset(BlockOffset.InvalidOffset)
             }
         } else {
-            nodeMapper.writeDataOffset(BlockStart.InvalidAddress)
+            nodeMapper.writeDataOffset(BlockOffset.InvalidOffset)
         }
-        nodeMapper.writeAttrOffset(attrsOffset)
+        nodeMapper.writeAttrsOffset(attrsOffset)
         nodeMapper.writeNameOffset(nameOffset)
         val nodeOffset = nodeMapper.flip()
+        nodeMapper.close()
 
         if (parent != null) {
             addChild(parent = parent, childRef = nodeOffset)
@@ -184,8 +185,8 @@ class MemorySegmentFileSystem(
         return nodeOffset
     }
 
-    fun <T : Any> read(type: KClass<T>, nodeRef: BlockStart): T {
-        val node = context.ledger.existingBuffer(name = type.simpleName!!, mode = READ, offset = nodeRef)
+    fun <T : Any> read(type: KClass<T>, nodeRef: BlockOffset): T {
+        val node = context.ledger.existingChannel(mode = Mode.readOnly(), offset = nodeRef)
         node.use {
             if (ValidNode::class.isSuperclassOf(type)) {
                 val fileTypeOrdinal = node.readInt()
@@ -195,7 +196,7 @@ class MemorySegmentFileSystem(
                 requireNotNull(nameRef)
                 requireNotNull(attrRef)
 
-                val nameChannel = context.ledger.existingBuffer(name = "name", mode = READ, offset = nameRef)
+                val nameChannel = context.ledger.existingChannel(mode = Mode.readOnly(), offset = nameRef)
                 val name = nameChannel.use {
                     it.readString()
                 }
@@ -206,7 +207,7 @@ class MemorySegmentFileSystem(
                         return type.cast(
                             DirectoryNode(
                                 nodeRef = nodeRef,
-                                dataRef = dataRef ?: BlockStart.InvalidAddress,
+                                dataRef = dataRef ?: BlockOffset.InvalidOffset,
                                 attrRef = attrRef,
                                 nameRef = nameRef,
                                 name = name,
@@ -218,7 +219,7 @@ class MemorySegmentFileSystem(
                         return type.cast(
                             RegularFileNode(
                                 nodeRef = nodeRef,
-                                dataRef = dataRef ?: BlockStart.InvalidAddress,
+                                dataRef = dataRef ?: BlockOffset.InvalidOffset,
                                 attrRef = attrRef,
                                 nameRef = nameRef,
                                 name = name,
@@ -230,7 +231,7 @@ class MemorySegmentFileSystem(
                         return type.cast(
                             SymbolicLinkNode(
                                 nodeRef = nodeRef,
-                                dataRef = dataRef ?: BlockStart.InvalidAddress,
+                                dataRef = dataRef ?: BlockOffset.InvalidOffset,
                                 attrRef = attrRef,
                                 nameRef = nameRef,
                                 name = name,
@@ -266,26 +267,26 @@ class MemorySegmentFileSystem(
             if (child is RegularFileNode || child is DirectoryNode) {
                 val dataRef = readDataOffset(child.offset)
                 if (dataRef != null) {
-                    context.ledger.release(dataRef)
+                    context.ledger.releaseAll(dataRef)
                 }
             }
 
             val attrRef = readAttrsOffset(child.offset)
             if (attrRef != null) {
-                context.ledger.release(attrRef)
+                context.ledger.releaseAll(attrRef)
             }
 
             val nameOffset = readNameOffset(child.offset)
             if (nameOffset != null) {
-                context.ledger.release(nameOffset)
+                context.ledger.releaseAll(nameOffset)
             }
 
-            context.ledger.release(child.offset)
+            context.ledger.releaseAll(child.offset)
         }
     }
 
     //    data
-    private fun readDataOffset(offset: BlockStart): BlockStart? {
+    private fun readDataOffset(offset: BlockOffset): BlockOffset? {
         val read = read(type = ValidNode::class, nodeRef = offset)
         val dataRef = read.dataRef
         return if (dataRef.isValid()) {
@@ -296,19 +297,19 @@ class MemorySegmentFileSystem(
     }
 
     //    attrs
-    fun findAttrs(nodeOffset: BlockStart): AttributesBlock {
+    fun findAttrs(nodeOffset: BlockOffset): AttributesBlock {
         val attrRef = readAttrsOffset(start = nodeOffset)
         requireNotNull(attrRef)
 
         return readAttrs(attrsRef = attrRef)
     }
 
-    fun updateFileTime(offset: BlockStart, attrs: AttributesBlock) {
+    fun updateFileTime(offset: BlockOffset, attrs: AttributesBlock) {
         context.locks.newLock(offset = offset, mode = WRITE_TRUNCATE).use {
             val attrsRef = readAttrsOffset(offset)
             requireNotNull(attrsRef)
 
-            val attrsByteChannel = context.ledger.existingBuffer(name = "attrs", mode = WRITE_TRUNCATE, offset = attrsRef)
+            val attrsByteChannel = context.ledger.existingChannel(mode = Mode.updateRead(), offset = attrsRef)
             attrsByteChannel.use {
                 it.writeInstant(attrs.lastAccessTime)
                 it.writeInstant(attrs.lastModifiedTime)
@@ -317,12 +318,12 @@ class MemorySegmentFileSystem(
         }
     }
 
-    fun updatePermissions(offset: BlockStart, attrs: AttributesBlock) {
+    fun updatePermissions(offset: BlockOffset, attrs: AttributesBlock) {
         context.locks.newLock(offset = offset, mode = WRITE_TRUNCATE).use {
             val attrsRef = readAttrsOffset(offset)
             requireNotNull(attrsRef)
 
-            val attrsByteChannel = context.ledger.existingBuffer(name = "attrs", mode = WRITE_TRUNCATE, offset = attrsRef)
+            val attrsByteChannel = context.ledger.existingChannel(mode = Mode.updateRead(), offset = attrsRef)
             attrsByteChannel.use {
                 it.readInstant()
                 it.readInstant()
@@ -333,8 +334,8 @@ class MemorySegmentFileSystem(
         }
     }
 
-    private fun readAttrs(attrsRef: BlockStart): AttributesBlock {
-        val attrsByteChannel = context.ledger.existingBuffer(name = "attrs", mode = READ, offset = attrsRef)
+    private fun readAttrs(attrsRef: BlockOffset): AttributesBlock {
+        val attrsByteChannel = context.ledger.existingChannel(mode = Mode.readOnly(), offset = attrsRef)
         attrsByteChannel.use {
             val accessed = it.readInstant()
             val modified = it.readInstant()
@@ -353,7 +354,7 @@ class MemorySegmentFileSystem(
         }
     }
 
-    private fun readAttrsOffset(start: BlockStart): BlockStart? {
+    private fun readAttrsOffset(start: BlockOffset): BlockOffset? {
         val read = read(type = ValidNode::class, nodeRef = start)
         val attrRef = read.attrsRef
         return if (attrRef.isValid()) {
@@ -363,7 +364,7 @@ class MemorySegmentFileSystem(
         }
     }
 
-    private fun readNameOffset(start: BlockStart): BlockStart? {
+    private fun readNameOffset(start: BlockOffset): BlockOffset? {
         val read = read(type = ValidNode::class, nodeRef = start)
         val nameRef = read.nameRef
         return if (nameRef.isValid()) {
@@ -387,7 +388,7 @@ class MemorySegmentFileSystem(
         return findChildByName(findChildIds, name)
     }
 
-    private fun findChildByName(ids: Sequence<BlockStart>, name: String): ValidNode? {
+    private fun findChildByName(ids: Sequence<BlockOffset>, name: String): ValidNode? {
         for (id in ids) {
             val node = read(type = ValidNode::class, nodeRef = id)
             if (node.name == name) {
@@ -397,9 +398,9 @@ class MemorySegmentFileSystem(
         return null
     }
 
-    private fun addChild(parent: DirectoryNode, childRef: BlockStart) {
+    private fun addChild(parent: DirectoryNode, childRef: BlockOffset) {
         context.locks.newLock(offset = parent.offset, mode = WRITE_TRUNCATE).use {
-            val children: Sequence<BlockStart> = readChildrenRefs(parent) + childRef
+            val children: Sequence<BlockOffset> = readChildrenRefs(parent) + childRef
 
             upsertChildren(nodeRef = parent.offset, prevDataRef = parent.dataRef, children = children)
         }
@@ -410,13 +411,13 @@ class MemorySegmentFileSystem(
         val findChildByName = findChildByName(childIds, name)
         require(findChildByName != null)
 
-        val children = mutableListOf<BlockStart>()
+        val children = mutableListOf<BlockOffset>()
         children.addAll(childIds)
         children.remove(findChildByName.offset)
         upsertChildren(nodeRef = parent.offset, prevDataRef = parent.dataRef, children = children.asSequence())
     }
 
-    private fun readChildrenRefs(parent: DirectoryNode): Sequence<BlockStart> {
+    private fun readChildrenRefs(parent: DirectoryNode): Sequence<BlockOffset> {
         val dataRef = readDataOffset(parent.offset)
         if (dataRef != null) {
             return readChildrenRefs(dataRef)
@@ -424,27 +425,27 @@ class MemorySegmentFileSystem(
         return sequenceOf()
     }
 
-    private fun upsertChildren(nodeRef: BlockStart, prevDataRef: BlockStart, children: Sequence<BlockStart>) {
+    private fun upsertChildren(nodeRef: BlockOffset, prevDataRef: BlockOffset, children: Sequence<BlockOffset>) {
         if (prevDataRef.isValid()) {
-            context.ledger.release(offset = prevDataRef)
+            context.ledger.releaseAll(offset = prevDataRef)
         }
 
         val childrenCount = children.count()
-        val newDataRef: BlockStart = if (childrenCount > 0) {
+        val newDataRef: BlockOffset = if (childrenCount > 0) {
             val maxExpectedBodySize = intByteSize + (context.ledger.offsetBytes * childrenCount)
-            val newDataByteChannel = context.ledger.newBuffer(name = "children", bodyAlignment = maxExpectedBodySize)
+            val newDataByteChannel = context.ledger.allocateChannel(bodyAlignment = maxExpectedBodySize)
             newDataByteChannel.use {
                 it.writeOffsets(children)
             }
-            newDataByteChannel.first()
+            newDataByteChannel.address()
         } else {
-            BlockStart.InvalidAddress
+            BlockOffset.InvalidOffset
         }
         updateDataOffset(nodeRef, newDataRef)
     }
 
-    private fun updateDataOffset(nodeRef: BlockStart, newDataRef: BlockStart) {
-        val nodeSegmentChannel = context.ledger.existingBuffer(name = "data", mode = WRITE_TRUNCATE, offset = nodeRef)
+    private fun updateDataOffset(nodeRef: BlockOffset, newDataRef: BlockOffset) {
+        val nodeSegmentChannel = context.ledger.existingChannel(mode = Mode.updateRead(), offset = nodeRef)
         nodeSegmentChannel.use {
             it.skipInt()
             it.writeOffset(newDataRef)
@@ -452,8 +453,8 @@ class MemorySegmentFileSystem(
         }
     }
 
-    private fun readChildrenRefs(dataRef: BlockStart): Sequence<BlockStart> {
-        val childrenByteChannel = context.ledger.existingBuffer(name = "children", mode = READ, offset = dataRef)
+    private fun readChildrenRefs(dataRef: BlockOffset): Sequence<BlockOffset> {
+        val childrenByteChannel = context.ledger.existingChannel(mode = Mode.readOnly(), offset = dataRef)
         childrenByteChannel.use {
             return it.readRefs()
         }

@@ -16,13 +16,14 @@
 
 package org.wtrzcinski.files.memory.address
 
-import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer.Companion.InvalidRef
+import org.wtrzcinski.files.memory.address.Block.Companion.InvalidRef
 import org.wtrzcinski.files.memory.exception.MemoryIllegalArgumentException
 
 data class ByteSize(
     private val value: Long,
     private val shift: ByteSizeShift = ByteSizeShift.noop,
-) {
+): Comparable<ByteSize> {
+
     companion object {
         val InvalidSize: ByteSize = ByteSize(value = InvalidRef)
 
@@ -125,7 +126,7 @@ data class ByteSize(
         return "${javaClass.simpleName}(size=$size)"
     }
 
-    operator fun compareTo(other: ByteSize): Int {
+    override operator fun compareTo(other: ByteSize): Int {
         return size.compareTo(other.size)
     }
 

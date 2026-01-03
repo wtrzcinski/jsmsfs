@@ -16,30 +16,48 @@
 
 package org.wtrzcinski.files.memory.buffer
 
-import org.wtrzcinski.files.memory.address.BlockStart
+import org.wtrzcinski.files.memory.address.BlockOffset
 import org.wtrzcinski.files.memory.address.ByteSize
-import org.wtrzcinski.files.memory.allocator.IntMemoryLedger.Companion.MaxUnsignedIntInclusive
-import org.wtrzcinski.files.memory.buffer.channel.FragmentedReadWriteBuffer
-import org.wtrzcinski.files.memory.buffer.chunk.ChunkReadWriteBuffer
+import org.wtrzcinski.files.memory.buffer.MemoryReadBuffer.Companion.MaxUnsignedIntInclusive
+import org.wtrzcinski.files.memory.mapper.MemoryBlockReadWriteMapper
 import org.wtrzcinski.files.memory.util.Check
+import java.nio.ByteBuffer
 import java.nio.charset.Charset
 import java.time.Instant
 
-interface MemoryWriteBuffer {
+sealed interface MemoryWriteBuffer {
 
-    fun writeOffset(value: BlockStart)
+    fun writeOffset(value: BlockOffset): MemoryWriteBuffer
 
-    fun writeSize(value: ByteSize)
+    fun writeSize(value: ByteSize): MemoryWriteBuffer
 
     fun writeLong(value: Long)
 
     fun writeInt(value: Int)
 
-    fun write(value: ByteArray)
+    fun write(src: ByteBuffer): Int
 
-    fun write(buffer: ChunkReadWriteBuffer): Int
+    fun write(src: ByteBuffer, length: ByteSize)
 
-    fun write(value: FragmentedReadWriteBuffer): Int
+    fun write(value: ByteArray) {
+        write(src = ByteBuffer.wrap(value))
+    }
+
+    fun write(source: MemoryReadWriteBuffer): Int {
+        when (source) {
+            is ContinuousReadWriteBuffer -> {
+                return write(source.byteBuffer)
+            }
+
+            is FragmentedReadWriteBuffer -> {
+                var count = 0
+                for (mapper: MemoryBlockReadWriteMapper in source.data.data) {
+                    count += write(source = mapper.body)
+                }
+                return count
+            }
+        }
+    }
 
     fun writeUnsignedInt(value: Long) {
         Check.isTrue { value >= 0 }
@@ -47,7 +65,7 @@ interface MemoryWriteBuffer {
         writeInt(value.toInt())
     }
 
-    fun writeOffsets(value: Sequence<BlockStart>) {
+    fun writeOffsets(value: Sequence<BlockOffset>) {
         writeInt(value.count())
         for (ref in value) {
             writeOffset(ref)
@@ -60,23 +78,12 @@ interface MemoryWriteBuffer {
     }
 
     fun writeString(value: String, charset: Charset = Charsets.UTF_8) {
-        val byteArray = value.toByteArray(charset)
-        writeInt(byteArray.size)
-        write(byteArray)
-    }
-
-    fun writeMap(other: Map<String, String>, charset: Charset = Charsets.UTF_8) {
-        writeInt(other.size)
-        for ((key, value) in other) {
-            writeString(key, charset)
-            writeString(value, charset)
-        }
-    }
-
-    fun writeList(other: List<String>, charset: Charset = Charsets.UTF_8) {
-        writeInt(other.size)
-        for (string in other) {
-            writeString(string, charset)
+        if (value.isNotEmpty()) {
+            val byteArray = value.toByteArray(charset)
+            writeInt(byteArray.size)
+            write(byteArray)
+        } else {
+            writeInt(0)
         }
     }
 }

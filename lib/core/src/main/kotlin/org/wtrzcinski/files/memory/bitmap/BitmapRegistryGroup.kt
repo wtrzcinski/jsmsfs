@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,11 @@
 package org.wtrzcinski.files.memory.bitmap
 
 import org.wtrzcinski.files.memory.address.Block
-import org.wtrzcinski.files.memory.address.BlockStart
 import org.wtrzcinski.files.memory.address.ByteSize
 import org.wtrzcinski.files.memory.lock.MemoryFileLock.Companion.use
 import org.wtrzcinski.files.memory.lock.MemoryLockRegistry
-import org.wtrzcinski.files.memory.mode.AbstractCloseable
 import org.wtrzcinski.files.memory.mode.Mode
+import org.wtrzcinski.files.memory.mode.ModeState
 import org.wtrzcinski.files.memory.util.Check
 import org.wtrzcinski.files.memory.util.Require
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -30,12 +29,13 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 @OptIn(ExperimentalAtomicApi::class)
 class BitmapRegistryGroup(
     offset: Long,
-    mode: Mode = Mode.readWrite(),
+    mode: Mode = Mode.createRead(),
     override val totalByteSize: ByteSize,
     private val locks: MemoryLockRegistry,
-) : BitmapRegistry, Block, AbstractCloseable(mode = mode) {
+    private val compact: Boolean,
+) : BitmapRegistry, Block, ModeState(mode = mode) {
 
-    override val free: BitmapFreeBlocks = BitmapFreeBlocks()
+    override val free: BitmapFreeBlocks = BitmapFreeBlocks(compact)
 
     override val reserved: BitmapReservedBlocks = BitmapReservedBlocks()
 
@@ -47,18 +47,28 @@ class BitmapRegistryGroup(
         free.add(BitmapEntry(start = offset, size = totalByteSize.size))
     }
 
-    override fun allocate(name: String, minBlockSize: ByteSize, maxBlockSize: ByteSize, prev: BlockStart): BitmapEntry {
+    override fun allocate(name: String, minBlockSize: ByteSize, maxBlockSize: ByteSize, prev: BitmapEntry): BitmapEntry {
         Check.isTrue { minBlockSize <= maxBlockSize }
         Check.isTrue { isWritable() }
 
         val lock = locks.bitmapLock
         lock.use {
-            var result = free.findBySize(minByteSize = minBlockSize, maxByteSize = maxBlockSize)
+            var result = free.findBySize(minByteSize = minBlockSize, maxByteSize = maxBlockSize, prev = prev)
             free.remove(result)
+
             if (result.size > maxBlockSize.size) {
                 val divide = result.div(maxBlockSize)
                 free.add(divide.second)
                 result = divide.first
+            }
+
+            if (compact) {
+                if (prev.isValid()) {
+                    if (prev.endExclusive == result.start) {
+                        reserved.remove(prev)
+                        result = prev + result
+                    }
+                }
             }
             reserved.add(result)
 
@@ -75,7 +85,7 @@ class BitmapRegistryGroup(
 
         val lock = locks.bitmapLock
         lock.use {
-            val segment = reserved.byEndOffset[block.end]
+            val segment = reserved.byEndOffset[block.endExclusive]
             if (segment != null) {
                 val subtract = segment.minus(block)
 

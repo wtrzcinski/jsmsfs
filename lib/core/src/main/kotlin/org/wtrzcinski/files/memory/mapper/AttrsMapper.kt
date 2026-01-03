@@ -17,12 +17,11 @@
 package org.wtrzcinski.files.memory.mapper
 
 import org.wtrzcinski.files.memory.MemorySegmentLedger
-import org.wtrzcinski.files.memory.address.BlockStart
-import org.wtrzcinski.files.memory.address.ByteSize
-import org.wtrzcinski.files.memory.buffer.channel.FragmentedReadWriteBuffer
-import org.wtrzcinski.files.memory.mapper.MemoryMapperRegistry.Companion.instantByteSize
-import org.wtrzcinski.files.memory.mapper.MemoryMapperRegistry.Companion.intByteSize
-import org.wtrzcinski.files.memory.mode.AbstractCloseable
+import org.wtrzcinski.files.memory.address.BlockOffset
+import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer
+import org.wtrzcinski.files.memory.mode.Mode
+import org.wtrzcinski.files.memory.mode.ModeState
+import org.wtrzcinski.files.memory.schema.MapperSchema
 import org.wtrzcinski.files.memory.util.Check
 import java.nio.file.attribute.PosixFilePermission
 import java.nio.file.attribute.PosixFilePermissions
@@ -31,89 +30,80 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @ExperimentalAtomicApi
 class AttrsMapper(
-    private val name: String,
+    mode: Mode,
     private val memory: MemorySegmentLedger,
-) : BlockBodyMapper, AbstractCloseable() {
+    private val schema: MapperSchema,
+) : BlockBodyMapper, ModeState(mode) {
 
-    companion object {
-        val instantsSize: ByteSize = instantByteSize * 3
-        val permissionsSize: ByteSize = intByteSize + ByteSize(9)
-        val maxStringSize: ByteSize = intByteSize + ByteSize(100 * 4)
-        private val minSize: Long = (instantByteSize * 3).size + permissionsSize.size + (intByteSize.size * 2)
-        private val maxSize: ByteSize = (instantByteSize * 3) + permissionsSize + (maxStringSize * 2)
-    }
-
-    private val tmpBuffer: FragmentedReadWriteBuffer = memory.newBuffer(name = "$name.tmp", bodyAlignment = maxSize)
+    private val buffer: MemoryReadWriteBuffer = memory.allocateChannel(bodyAlignment = schema.bodyAlignment())
 
     fun writeLastAccessTime(lastAccessTime: Instant) {
         checkIsWritable()
-        Check.isTrue { tmpBuffer.position() == 0L }
+        checkPosition(schema.offsetRange("lastAccessTime"))
 
-        tmpBuffer.writeInstant(lastAccessTime)
+        buffer.writeInstant(lastAccessTime)
     }
 
     fun writeLastModifiedTime(lastModifiedTime: Instant) {
         checkIsWritable()
-        Check.isTrue { tmpBuffer.position() == instantByteSize.size }
+        checkPosition(schema.offsetRange("lastModifiedTime"))
 
-        tmpBuffer.writeInstant(lastModifiedTime)
+        buffer.writeInstant(lastModifiedTime)
     }
 
     fun writeCreationTime(creationTime: Instant) {
         checkIsWritable()
-        Check.isTrue { tmpBuffer.position() == (instantByteSize * 2).size }
+        checkPosition(schema.offsetRange("creationTime"))
 
-        tmpBuffer.writeInstant(creationTime)
+        buffer.writeInstant(creationTime)
     }
 
     fun writePermissions(value: Set<PosixFilePermission>) {
         checkIsWritable()
-        Check.isTrue { tmpBuffer.position() == instantsSize.size }
+        checkPosition(schema.offsetRange("permissions"))
 
-        tmpBuffer.writeString(PosixFilePermissions.toString(value))
+        buffer.writeString(PosixFilePermissions.toString(value))
     }
 
     fun writeOwner(owner: String) {
         checkIsWritable()
-        Check.isTrue { tmpBuffer.position() == instantsSize.size + permissionsSize.size }
+        checkPosition(schema.offsetRange("owner"))
 
-        tmpBuffer.writeString(owner)
+        buffer.writeString(owner)
     }
 
     fun writeGroup(group: String) {
         checkIsWritable()
-        Check.isTrue { tmpBuffer.position() >= instantsSize.size + permissionsSize.size + 4 }
+        checkPosition(schema.offsetRange("group"))
 
-        tmpBuffer.writeString(group)
+        buffer.writeString(group)
     }
 
-    fun size(): Long {
-        checkIsReadable()
-        Check.isTrue { tmpBuffer.position() >= minSize }
+    override fun flip(): BlockOffset {
+        checkIsWritable()
+        checkPosition(schema.offsetRange)
 
-        return tmpBuffer.position()
-    }
-
-    override fun flip(): BlockStart {
         if (tryFlip()) {
-            Check.isTrue { tmpBuffer.position() >= minSize }
-
             try {
-                tmpBuffer.flip()
-                val bodySize = tmpBuffer.remaining()
-                val directBuffer = memory.newBuffer(name = "$name.direct", bodyAlignment = bodySize, capacity = bodySize)
+                buffer.flip()
+                val bodySize = buffer.remaining()
+                val directBuffer = memory.allocateChannel(bodySize = bodySize)
                 directBuffer.use {
-                    it.write(value = tmpBuffer)
+                    it.write(source = buffer)
                 }
 
-                val result = directBuffer.first()
-                return result
+                return directBuffer.address()
             } finally {
-                tmpBuffer.close()
-                tmpBuffer.release()
+                buffer.close()
+                buffer.release()
             }
         } else {
             throwIllegalStateException()
         }
     }
+
+    private fun checkPosition(range: ClosedRange<BlockOffset>) {
+        Check.isTrue { BlockOffset(buffer.position()) in range }
+    }
+
 }

@@ -16,8 +16,8 @@
 
 package org.wtrzcinski.files.memory.lock
 
-import org.wtrzcinski.files.memory.address.BlockStart
-import org.wtrzcinski.files.memory.address.DefaultBlockStart
+import org.wtrzcinski.files.memory.address.BlockOffset
+import org.wtrzcinski.files.memory.address.DefaultBlockOffset
 import org.wtrzcinski.files.memory.provider.MemoryFileOpenOptions
 import org.wtrzcinski.files.memory.util.Check
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -26,14 +26,14 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
 data class ReadWriteMemoryFileLock(
-    private val registry: MemoryLockRegistry,
-    private val start: BlockStart,
+    private val locks: MemoryLockRegistry,
+    private val start: BlockOffset,
     private val lock: ReentrantReadWriteLock = ReentrantReadWriteLock(true),
     var refs: AtomicInt = AtomicInt(0),
 ) {
 
     init {
-        Check.isTrue { start is DefaultBlockStart }
+        Check.isTrue { start is DefaultBlockOffset }
     }
 
     fun refCount(): Int {
@@ -56,6 +56,6 @@ data class ReadWriteMemoryFileLock(
             lock.readLock().unlock()
         }
 
-        registry.releaseLock(offset = start, mode = mode)
+        locks.releaseLock(offset = start, mode = mode)
     }
 }

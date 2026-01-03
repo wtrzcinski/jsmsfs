@@ -27,6 +27,8 @@ import org.wtrzcinski.files.memory.path.FilePath.Companion.deleteRecursively
 import org.wtrzcinski.files.memory.path.HardFilePath
 import org.wtrzcinski.files.memory.provider.MemoryFileStore
 import org.wtrzcinski.files.memory.provider.MemoryFileSystemProvider
+import org.wtrzcinski.files.memory.provider.MemoryFileSystemProvider.Companion.Capacity
+import org.wtrzcinski.files.memory.provider.MemoryFileSystemProvider.Companion.MaxBlockSize
 import java.net.URI
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
@@ -38,17 +40,17 @@ internal class MonkeyTest {
         private val log = LoggerFactory.getLogger(MonkeyTest::class.java)
 
         val capacity: Int = 4
-        val blockSize: Int = 256
-        val minStringSize: Int = blockSize
-        val maxStringSize: Int = blockSize * 2
-        val repeats: Int = 10_000
+        val maxBlockSize: Int = 128
+        val minStringSize: Int = maxBlockSize * 2
+        val maxStringSize: Int = maxBlockSize * 4
+        val repeats: Int = 2000 * 60
 
         private val registry = Registry()
 
         init {
             MemoryFileSystemProvider.newFileSystem(
                 uri = URI.create("jsmsfs:///"),
-                env = mapOf("scope" to "SHARED", "capacity" to "${capacity}MB", "blockSize" to blockSize)
+                env = mapOf(Capacity to "${capacity}MB", MaxBlockSize to maxBlockSize)
             )
             val root = Path.of(URI.create("jsmsfs:///"))
             require(root is HardFilePath)
@@ -84,15 +86,16 @@ internal class MonkeyTest {
         val fileStore = root.fileSystem.fileStores.first() as MemoryFileStore
 
         repeat(repeats) {
-            if (fileStore.reservedSpaceFactor <= 0.9) {
-                registry.createRandom()
-            } else {
+            while (fileStore.reservedSpaceFactor > 0.9) {
                 registry.deleteRandom()
             }
+            registry.createRandom()
             registry.checkRandomFile()
+//            todo wojtek fix links
 //            registry.checkRandomLink()
         }
 
+        log.info("{} {} {}", registry.regular.size, registry.directories.size, registry.count())
         log.info("{}", fileStore.reservedCount)
         log.info("{}", fileStore.reservedSpaceFactor)
         log.info("{}", fileStore.metadataSpaceFactor)

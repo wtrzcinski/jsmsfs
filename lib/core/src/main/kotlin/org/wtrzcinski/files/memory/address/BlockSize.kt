@@ -18,8 +18,4 @@ package org.wtrzcinski.files.memory.address
 
 interface BlockSize {
     val size: Long
-
-    fun isEmpty(): Boolean {
-        return size == 0L
-    }
 }

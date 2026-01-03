@@ -44,10 +44,10 @@ import kotlin.time.measureTime
 @ParameterizedClass
 @ArgumentsSource(TestArgumentsProvider::class)
 @Suppress("ConstPropertyName")
-class PerformanceTest {
+class ConcurrencyTest {
     companion object {
         private const val repeats = 100
-        private const val threads = 32
+        private val threads = Runtime.getRuntime().availableProcessors()
     }
 
     @Parameter

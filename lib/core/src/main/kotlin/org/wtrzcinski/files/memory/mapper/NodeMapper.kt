@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,61 +16,91 @@
 
 package org.wtrzcinski.files.memory.mapper
 
-import org.wtrzcinski.files.memory.MemorySegmentLedger
-import org.wtrzcinski.files.memory.address.BlockStart
-import org.wtrzcinski.files.memory.buffer.channel.FragmentedReadWriteBuffer
+import org.wtrzcinski.files.memory.address.BlockOffset
+import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer
 import org.wtrzcinski.files.memory.exception.MemoryIllegalStateException
-import org.wtrzcinski.files.memory.mapper.MemoryMapperRegistry.Companion.intByteSize
-import org.wtrzcinski.files.memory.mode.AbstractCloseable
+import org.wtrzcinski.files.memory.schema.MapperSchema
 import org.wtrzcinski.files.memory.mode.Mode
+import org.wtrzcinski.files.memory.mode.ModeState
 import org.wtrzcinski.files.memory.node.NodeType
-import org.wtrzcinski.files.memory.util.Check.isTrue
+import org.wtrzcinski.files.memory.util.Check
 
+@Suppress("unused")
 class NodeMapper(
-    name: String,
-    memory: MemorySegmentLedger,
     mode: Mode,
-) : BlockBodyMapper, AbstractCloseable(mode) {
+    private val schema: MapperSchema,
+    private val buffer: MemoryReadWriteBuffer,
+) : BlockBodyMapper, ModeState(mode) {
 
-    private val dataPosition: Long = intByteSize.size
-    private val attrPosition: Long = intByteSize.size + memory.offsetBytes.toLong()
-    private val namePosition: Long = intByteSize.size + (memory.offsetBytes.toLong() * 2)
-    private val bodySize = intByteSize + (memory.offsetBytes * 3)
+    fun readType(): NodeType {
+        checkIsReadable()
+        checkPosition(schema.offsetRange("type"))
 
-    private val buffer: FragmentedReadWriteBuffer = memory.newBuffer(name = name, bodyAlignment = bodySize)
+        return NodeType.entries[buffer.readInt()]
+    }
 
     fun writeType(type: NodeType) {
         checkIsWritable()
-        isTrue { buffer.position() == 0L }
+        checkPosition(schema.offsetRange("type"))
 
         buffer.writeInt(type.ordinal)
     }
 
-    fun writeDataOffset(offset: BlockStart) {
-        isTrue { buffer.position() == dataPosition }
+    fun readDataOffset(): BlockOffset {
+        checkIsReadable()
+        checkPosition(schema.offsetRange("data"))
+
+        return checkNotNull(buffer.readOffset())
+    }
+
+    fun writeDataOffset(offset: BlockOffset) {
+        checkIsWritable()
+        checkPosition(schema.offsetRange("data"))
 
         buffer.writeOffset(offset)
     }
 
-    fun writeAttrOffset(offset: BlockStart) {
-        isTrue { buffer.position() == attrPosition }
+    fun readAttrsOffset(): BlockOffset {
+        checkIsReadable()
+        checkPosition(schema.offsetRange("attrs"))
+
+        return checkNotNull(buffer.readOffset())
+    }
+
+    fun writeAttrsOffset(offset: BlockOffset) {
+        checkIsWritable()
+        checkPosition(schema.offsetRange("attrs"))
 
         buffer.writeOffset(offset)
     }
 
-    fun writeNameOffset(offset: BlockStart) {
-        isTrue { buffer.position() == namePosition }
+    fun readNameOffset(): BlockOffset {
+        checkIsReadable()
+        checkPosition(schema.offsetRange("name"))
+
+        return checkNotNull(buffer.readOffset())
+    }
+
+    fun writeNameOffset(offset: BlockOffset) {
+        checkIsWritable()
+        checkPosition(schema.offsetRange("name"))
 
         buffer.writeOffset(offset)
     }
 
-    override fun flip(): BlockStart {
+    override fun flip(): BlockOffset {
+        checkIsWritable()
+        checkPosition(schema.offsetRange)
+
         if (tryFlip()) {
-            isTrue { buffer.position() == bodySize.size }
-
             return buffer.flip()
         } else {
             throw MemoryIllegalStateException()
         }
     }
+
+    private fun checkPosition(range: ClosedRange<BlockOffset>) {
+        Check.isTrue { BlockOffset(buffer.position()) in range }
+    }
+
 }

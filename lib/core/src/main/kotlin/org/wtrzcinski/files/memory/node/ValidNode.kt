@@ -16,21 +16,22 @@
 
 package org.wtrzcinski.files.memory.node
 
-import org.wtrzcinski.files.memory.address.BlockStart
-import org.wtrzcinski.files.memory.address.DefaultBlockStart
-import org.wtrzcinski.files.memory.util.Check.isTrue
+import org.wtrzcinski.files.memory.address.BlockOffset
+import org.wtrzcinski.files.memory.address.DefaultBlockOffset
+import org.wtrzcinski.files.memory.util.Check
 
+// todo wojtek replace with mapper
 sealed class ValidNode(
     val fileType: NodeType,
-    val offset: DefaultBlockStart,
-    val dataRef: DefaultBlockStart = BlockStart.InvalidAddress,
-    val attrsRef: DefaultBlockStart = BlockStart.InvalidAddress,
-    val nameRef: DefaultBlockStart = BlockStart.InvalidAddress,
+    val offset: DefaultBlockOffset,
+    val dataRef: DefaultBlockOffset = BlockOffset.InvalidOffset,
+    val attrsRef: DefaultBlockOffset = BlockOffset.InvalidOffset,
+    val nameRef: DefaultBlockOffset = BlockOffset.InvalidOffset,
     override val name: String,
 ) : NamedNode {
 
     init {
-        isTrue { offset.isValid() }
+        Check.isTrue { offset.isValid() }
     }
 
     override fun toString(): String {

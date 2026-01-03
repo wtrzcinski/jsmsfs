@@ -16,20 +16,20 @@
 
 package org.wtrzcinski.files.memory.node
 
-import org.wtrzcinski.files.memory.address.BlockStart
-import org.wtrzcinski.files.memory.address.DefaultBlockStart
+import org.wtrzcinski.files.memory.address.BlockOffset
+import org.wtrzcinski.files.memory.address.DefaultBlockOffset
 
 class RegularFileNode(
     name: String,
-    nodeRef: BlockStart,
-    dataRef: BlockStart = BlockStart.InvalidAddress,
-    attrRef: BlockStart = BlockStart.InvalidAddress,
-    nameRef: BlockStart = BlockStart.InvalidAddress,
+    nodeRef: BlockOffset,
+    dataRef: BlockOffset = BlockOffset.InvalidOffset,
+    attrRef: BlockOffset = BlockOffset.InvalidOffset,
+    nameRef: BlockOffset = BlockOffset.InvalidOffset,
 ) : ValidNode(
-    offset = DefaultBlockStart(nodeRef),
+    offset = DefaultBlockOffset(nodeRef),
     fileType = NodeType.Regular,
-    dataRef = DefaultBlockStart(dataRef),
-    attrsRef = DefaultBlockStart(attrRef),
-    nameRef = DefaultBlockStart(nameRef),
+    dataRef = DefaultBlockOffset(dataRef),
+    attrsRef = DefaultBlockOffset(attrRef),
+    nameRef = DefaultBlockOffset(nameRef),
     name = name,
 )

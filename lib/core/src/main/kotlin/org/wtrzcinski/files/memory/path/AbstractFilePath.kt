@@ -87,7 +87,12 @@ sealed class AbstractFilePath(
         if (count == 0) {
             return null
         } else if (count == 1) {
-            return this
+            return SymbolicFilePath(
+                fs = fs,
+                parent = parent,
+                name = names.last(),
+                absolute = true,
+            )
         } else {
             return SymbolicFilePath(
                 fs = fs,

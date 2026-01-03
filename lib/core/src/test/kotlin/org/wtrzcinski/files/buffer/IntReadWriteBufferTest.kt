@@ -18,9 +18,9 @@ package org.wtrzcinski.files.buffer
 
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.wtrzcinski.files.memory.address.BlockStart
-import org.wtrzcinski.files.memory.allocator.IntMemoryLedger.Companion.MaxUnsignedIntInclusive
-import org.wtrzcinski.files.memory.buffer.chunk.IntReadWriteBuffer
+import org.wtrzcinski.files.memory.address.BlockOffset
+import org.wtrzcinski.files.memory.buffer.IntContinuousReadWriteBuffer
+import org.wtrzcinski.files.memory.buffer.MemoryReadBuffer.Companion.MaxUnsignedIntInclusive
 import java.lang.foreign.MemorySegment
 
 internal class IntReadWriteBufferTest {
@@ -33,8 +33,8 @@ internal class IntReadWriteBufferTest {
     @Test
     fun `should store ref as unsigned int`() {
         val givenMemorySegment = MemorySegment.ofArray(ByteArray(4))
-        val givenByteBuffer = IntReadWriteBuffer(givenMemorySegment)
-        val givenUnsignedInt = BlockStart(Int.MAX_VALUE.toLong() * 2)
+        val givenByteBuffer = IntContinuousReadWriteBuffer(givenMemorySegment)
+        val givenUnsignedInt = BlockOffset(Int.MAX_VALUE.toLong() * 2)
 
         givenByteBuffer.writeOffset(givenUnsignedInt)
 

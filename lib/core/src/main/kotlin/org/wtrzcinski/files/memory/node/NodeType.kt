@@ -16,11 +16,15 @@
 
 package org.wtrzcinski.files.memory.node
 
-enum class NodeType {
-    Regular, // Bytes, Attrs, Name
-    Directory, // Children Refs, Attrs, Name
-    SymbolicLink, // Target Symbolic Name, Attrs, Name
-    Refs, // Refs
-    String, // 4 bytes for length + bytes
-    Bytes, // anything
+class NodeType(val ordinal: Int) {
+    companion object {
+        val Regular = NodeType(0) // Bytes, Attrs, Name
+        val Directory = NodeType(1) // Children Refs, Attrs, Name
+        val SymbolicLink = NodeType(2) // Target Symbolic Name, Attrs, Name
+        val Refs = NodeType(3) // Refs
+        val String = NodeType(4) // 4 bytes for length + string bytes
+        val Bytes = NodeType(5)  // bytes, can be anything
+
+        val entries = listOf(Regular, Directory, SymbolicLink, Refs, String, Bytes)
+    }
 }

@@ -10,7 +10,7 @@ Usage
 -----
 
 ```kotlin
-val givenEnv = mapOf("capacity" to "1MB", "blockSize" to "1KB")
+val givenEnv = mapOf("capacity" to "1MB")
 val givenFileSystem = FileSystems.newFileSystem(URI.create("jsmsfs:///"), givenEnv)
 val givenDirectoryPath = givenFileSystem.getPath("directory")
 val givenFilePath = givenDirectoryPath.resolve("file.txt")

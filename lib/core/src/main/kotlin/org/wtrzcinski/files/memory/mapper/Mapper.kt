@@ -16,11 +16,11 @@
 
 package org.wtrzcinski.files.memory.mapper
 
-import org.wtrzcinski.files.memory.address.BlockStart
+import org.wtrzcinski.files.memory.address.BlockOffset
 
-interface Mapper {
+interface Mapper : AutoCloseable {
     /**
      * Switch mode from writing to reading.
      */
-    fun flip(): BlockStart
+    fun flip(): BlockOffset
 }

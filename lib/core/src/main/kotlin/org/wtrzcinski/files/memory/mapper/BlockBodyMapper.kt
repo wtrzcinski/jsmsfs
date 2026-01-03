@@ -16,5 +16,4 @@
 
 package org.wtrzcinski.files.memory.mapper
 
-internal interface BlockBodyMapper : Mapper {
-}
+internal interface BlockBodyMapper : Mapper

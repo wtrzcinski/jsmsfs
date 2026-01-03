@@ -16,32 +16,49 @@
 
 package org.wtrzcinski.files.memory.address
 
-import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer.Companion.InvalidRef
+import org.wtrzcinski.files.memory.address.Block.Companion.InvalidRef
 
-interface BlockStart : Comparable<BlockStart> {
+interface BlockOffset : Comparable<BlockOffset> {
+
+    companion object {
+        val InvalidOffset: DefaultBlockOffset = DefaultBlockOffset(start = InvalidRef)
+
+        val EmptyOffset: DefaultBlockOffset = DefaultBlockOffset(start = 0L)
+
+        operator fun invoke(offset: Long): BlockOffset {
+            if (offset == InvalidOffset.start) {
+                return InvalidOffset
+            }
+            if (offset == EmptyOffset.start) {
+                return EmptyOffset
+            }
+            return DefaultBlockOffset(offset)
+        }
+    }
+
     val start: Long
 
     fun isValid(): Boolean {
         return start != InvalidRef
     }
 
-    operator fun plus(other: BlockStart): BlockStart {
+    operator fun plus(other: BlockOffset): BlockOffset {
         return invoke(this.start + other.start)
     }
 
-    operator fun plus(other: BlockSize): BlockStart {
+    operator fun plus(other: BlockSize): BlockOffset {
         return invoke(this.start + other.size)
     }
 
-    operator fun plus(other: ByteSize): BlockStart {
+    operator fun plus(other: ByteSize): BlockOffset {
         return invoke(this.start + other.size)
     }
 
-    operator fun plus(other: Long): BlockStart {
+    operator fun plus(other: Long): BlockOffset {
         return invoke(this.start + other)
     }
 
-    override fun compareTo(other: BlockStart): Int {
+    override fun compareTo(other: BlockOffset): Int {
         val compareTo = start.compareTo(other.start)
         if (compareTo != 0) {
             return compareTo
@@ -52,14 +69,4 @@ interface BlockStart : Comparable<BlockStart> {
         return 0
     }
 
-    companion object {
-        val InvalidAddress: DefaultBlockStart = DefaultBlockStart(start = InvalidRef)
-
-        operator fun invoke(offset: Long): BlockStart {
-            if (offset == InvalidRef) {
-                return InvalidAddress
-            }
-            return DefaultBlockStart(offset)
-        }
-    }
 }

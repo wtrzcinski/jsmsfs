@@ -19,10 +19,10 @@ package org.wtrzcinski.files.memory.address
 open class DefaultBlock(
     override val start: Long,
     override val size: Long,
-    override val end: Long = start + size,
+    override val endExclusive: Long = start + size,
 ) : Block {
     override fun toString(): String {
-        return "${javaClass.simpleName}(start=$start, size=$size, end=$end)"
+        return "${javaClass.simpleName}(start=$start, size=$size, end=$endExclusive)"
     }
 
     override fun equals(other: Any?): Boolean {

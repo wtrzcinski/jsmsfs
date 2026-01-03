@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,18 +17,25 @@
 package org.wtrzcinski.files.memory
 
 import org.wtrzcinski.files.memory.address.Block
-import org.wtrzcinski.files.memory.address.BlockStart
+import org.wtrzcinski.files.memory.address.BlockOffset
 import org.wtrzcinski.files.memory.address.ByteSize
-import org.wtrzcinski.files.memory.allocator.IntMemoryLedger
-import org.wtrzcinski.files.memory.allocator.LongMemoryLedger
+import org.wtrzcinski.files.memory.address.DefaultBlock
+import org.wtrzcinski.files.memory.allocator.Int32MemorySegmentLedger
+import org.wtrzcinski.files.memory.allocator.Int64MemorySegmentLedger
 import org.wtrzcinski.files.memory.bitmap.BitmapEntry
 import org.wtrzcinski.files.memory.bitmap.BitmapRegistry
-import org.wtrzcinski.files.memory.buffer.channel.FragmentedReadWriteBuffer
-import org.wtrzcinski.files.memory.buffer.chunk.ChunkReadWriteBuffer
+import org.wtrzcinski.files.memory.buffer.BufferAllocator
+import org.wtrzcinski.files.memory.buffer.ContinuousReadWriteBuffer
+import org.wtrzcinski.files.memory.buffer.FragmentedReadWriteBuffer
+import org.wtrzcinski.files.memory.buffer.MemoryReadBuffer.Companion.MaxUnsignedIntInclusive
+import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer
 import org.wtrzcinski.files.memory.lock.MemoryFileLock
 import org.wtrzcinski.files.memory.mapper.MemoryBlockIterator
 import org.wtrzcinski.files.memory.mapper.MemoryBlockReadWriteMapper
-import org.wtrzcinski.files.memory.provider.MemoryFileOpenOptions
+import org.wtrzcinski.files.memory.mapper.MemoryHeaderMapper
+import org.wtrzcinski.files.memory.mode.Mode
+import org.wtrzcinski.files.memory.mode.OpenMode
+import org.wtrzcinski.files.memory.mode.WriteMode
 import org.wtrzcinski.files.memory.util.Check
 import java.lang.foreign.MemorySegment
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -39,39 +46,64 @@ abstract class MemorySegmentLedger(
     val memory: MemorySegment,
     val bitmap: BitmapRegistry,
     val maxBlockSize: ByteSize,
-) {
-
-    abstract val sizeBytes: ByteSize
-
-    abstract val offsetBytes: ByteSize
+    val sizeBytes: ByteSize,
+    val offsetBytes: ByteSize,
+) : BufferAllocator {
 
     val headerBytes: ByteSize get() = sizeBytes + offsetBytes
 
-    abstract fun directBuffer(start: BlockStart, size: ByteSize): ChunkReadWriteBuffer
+    init {
+        Check.isTrue { maxBlockSize >= headerBytes }
+    }
 
-    fun existingBuffer(
-        name: String = "",
-        offset: BlockStart,
-        mode: MemoryFileOpenOptions = MemoryFileOpenOptions.READ,
-        lock: MemoryFileLock? = null,
-    ): FragmentedReadWriteBuffer {
+    abstract fun continuousBuffer(address: BlockOffset, start: BlockOffset, size: ByteSize): ContinuousReadWriteBuffer
+
+    override fun existingBuffer(offset: BlockOffset): MemoryBlockReadWriteMapper {
         Check.isTrue { offset.isValid() }
 
-        val first = MemoryBlockReadWriteMapper.existingBlock(memory = this, offset = offset)
+//        header
+        val bodySizeBuffer = bodySizeBuffer(offset)
+        val nextOffsetBuffer = nextOffsetBuffer(offset)
+        val header = MemoryHeaderMapper(
+            offset = offset,
+            bodySizeBuffer = bodySizeBuffer,
+            nextOffsetBuffer = nextOffsetBuffer,
+        )
+//        body
+        val body = continuousBuffer(
+            address = offset,
+            start = offset + header.size,
+            size = header.readBodySize,
+        )
+        return MemoryBlockReadWriteMapper(
+            memory = this,
+            offset = offset,
+            header = header,
+            body = body,
+        )
+    }
+
+    override fun existingChannel(offset: BlockOffset, mode: Mode, lock: MemoryFileLock?): MemoryReadWriteBuffer {
+        val first = existingBuffer(offset)
+        if (mode.open == OpenMode.ReadOnly) {
+            if (first.readNextOffset() == null) {
+                return first.body.onClose { lock?.release() }
+            }
+        }
+
         val channel = FragmentedReadWriteBuffer(
-            lock = lock,
             data = MemoryBlockIterator(
-                name = name,
                 memory = this,
                 first = first,
                 mode = mode,
             ),
+            close = { lock?.release() },
         )
 
-        if (mode.readWrite) {
-            if (mode.append) {
+        if (mode.open == OpenMode.ReadWrite) {
+            if (mode.write == WriteMode.AppendToExisting) {
                 return channel.append()
-            } else if (mode.truncate) {
+            } else if (mode.write == WriteMode.TruncateExisting) {
                 return channel.truncate()
             }
         }
@@ -79,64 +111,89 @@ abstract class MemorySegmentLedger(
         return channel
     }
 
-    fun newBuffer(
-        name: String = "",
-        lock: MemoryFileLock? = null,
-        prev: Block = Block.InvalidBlock,
-        bodyAlignment: ByteSize = ByteSize.InvalidSize,
-        capacity: ByteSize = ByteSize.InvalidSize,
-    ): FragmentedReadWriteBuffer {
-
-        val maxBlockSize = if (bodyAlignment.isValid()) {
-            bodyAlignment + headerBytes
+    override fun allocateBuffer(prev: Block, bodyAlignment: ByteSize, bodySize: ByteSize): MemoryBlockReadWriteMapper {
+        val maxBlockSize: ByteSize
+        val minBlockSize: ByteSize
+        if (bodySize.isValid()) {
+            minBlockSize = bodySize + this.headerBytes
+            maxBlockSize = bodySize + this.headerBytes
+        } else if (bodyAlignment.isValid()) {
+            minBlockSize = this.headerBytes
+            maxBlockSize = bodyAlignment + this.headerBytes
         } else {
-            this.maxBlockSize
+            minBlockSize = this.headerBytes
+            maxBlockSize = this.maxBlockSize
         }
 
-        val minBlockSize = headerBytes
-
-        val reserveBySize: BitmapEntry = bitmap.allocate(
+        val reserved: DefaultBlock = bitmap.allocate(
             name = name,
             minBlockSize = minBlockSize,
             maxBlockSize = maxBlockSize,
-            prev = prev,
+            prev = BitmapEntry(prev),
         )
 
-//        if (prev.isValid()) {
-//            if (prev.end == reserveBySize.start) {
-//                TODO("Not yet implemented")
-//            }
-//        }
+        if (bodySize.isValid()) {
+            Check.isTrue { reserved.size == bodySize.size + this.headerBytes.size }
+        }
 
-        Check.isTrue { reserveBySize.start != prev.start }
-
-        val first = MemoryBlockReadWriteMapper.newBlock(
+//        header
+        val bodySize = ByteSize(value = reserved.size - headerBytes.size)
+        val header = MemoryHeaderMapper(
+            offset = reserved,
+            bodySizeBuffer = bodySizeBuffer(reserved).writeSize(value = bodySize),
+            nextOffsetBuffer = nextOffsetBuffer(reserved).writeOffset(value = BlockOffset.InvalidOffset),
+        )
+//        body
+        val body: MemoryReadWriteBuffer = continuousBuffer(
+            address = reserved,
+            start = header.offset + header.size,
+            size = header.readBodySize,
+        )
+        return MemoryBlockReadWriteMapper(
             memory = this,
-            offset = reserveBySize,
-            bodySize = ByteSize(value = reserveBySize.size - headerBytes.size),
+            offset = reserved,
+            header = header,
+            body = body,
         )
-        val channel = FragmentedReadWriteBuffer(
-            lock = lock,
-            data = MemoryBlockIterator(
-                name = name,
-                memory = this,
-                first = first,
-                capacity = capacity,
-                mode = MemoryFileOpenOptions.WRITE_TRUNCATE,
-            ),
-        )
-        return channel
     }
 
-    fun release(offset: BlockStart) {
-        val existingBuffer = existingBuffer(offset = offset, mode = MemoryFileOpenOptions.WRITE_TRUNCATE)
+    override fun allocateChannel(
+        lock: MemoryFileLock?,
+        bodyAlignment: ByteSize,
+        bodySize: ByteSize,
+    ): MemoryReadWriteBuffer {
+        val first = allocateBuffer(prev = Block.InvalidBlock, bodyAlignment = bodyAlignment, bodySize = bodySize)
+        if (bodySize.isValid()) {
+            return first.body.onClose { lock?.release() }
+        }
+        return FragmentedReadWriteBuffer(
+            data = MemoryBlockIterator(
+                memory = this,
+                first = first,
+                capacity = bodySize,
+                mode = Mode.createRead(),
+            ),
+            close = { lock?.release() },
+        )
+    }
+
+    override fun releaseOne(block: Block) {
+        bitmap.release(block = block)
+    }
+
+    override fun releaseAll(offset: BlockOffset) {
+        val existingBuffer = existingChannel(offset = offset, mode = Mode.createRead())
         existingBuffer.skipRemaining()
         existingBuffer.close()
         existingBuffer.release()
     }
 
-    fun release(block: Block) {
-        bitmap.release(block = block)
+    private fun bodySizeBuffer(offset: BlockOffset): MemoryReadWriteBuffer {
+        return continuousBuffer(address = offset, start = offset, size = sizeBytes)
+    }
+
+    private fun nextOffsetBuffer(offset: BlockOffset): MemoryReadWriteBuffer {
+        return continuousBuffer(address = offset, start = offset + sizeBytes, size = offsetBytes)
     }
 
     companion object {
@@ -145,14 +202,14 @@ abstract class MemorySegmentLedger(
             bitmap: BitmapRegistry,
             maxBlockByteSize: ByteSize,
         ): MemorySegmentLedger {
-            if (memory.byteSize() <= IntMemoryLedger.MaxUnsignedIntInclusive) {
-                return IntMemoryLedger(
+            if (memory.byteSize() <= MaxUnsignedIntInclusive) {
+                return Int32MemorySegmentLedger(
                     memory = memory,
                     bitmap = bitmap,
                     maxBlockByteSize = maxBlockByteSize,
                 )
             } else {
-                return LongMemoryLedger(
+                return Int64MemorySegmentLedger(
                     memory = memory,
                     bitmap = bitmap,
                     maxBlockByteSize = maxBlockByteSize,

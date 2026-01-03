@@ -22,5 +22,5 @@ enum class WriteMode: OpenOption {
     RequireNew,
     TruncateExisting,
     AppendToExisting,
-    UseExisting,
+    RequireExisting,
 }

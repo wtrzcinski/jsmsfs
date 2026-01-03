@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,15 +21,20 @@ import org.wtrzcinski.files.memory.allocator.MemoryScopeType
 import org.wtrzcinski.files.memory.bitmap.BitmapRegistry
 import org.wtrzcinski.files.memory.lock.MemoryLockRegistry
 import org.wtrzcinski.files.memory.mapper.MemoryMapperRegistry
-import org.wtrzcinski.files.memory.mode.AbstractCloseable
+import org.wtrzcinski.files.memory.mode.ModeState
 import java.lang.foreign.MemorySegment
 
 class MemorySegmentContext(
     capacity: ByteSize,
     scope: MemoryScopeType = MemoryScopeType.DEFAULT,
-    blockSize: ByteSize = ByteSize(1024 * 4),
+    blockSize: ByteSize = DefaultBlockSize,
     env: Map<String, Any?> = mapOf(),
-) : AbstractCloseable() {
+    compact: Boolean = true,
+) : ModeState() {
+
+    companion object {
+        val DefaultBlockSize = ByteSize(1024 * 4)
+    }
 
     private val memoryFactory = scope.createFactory(env)
 
@@ -43,9 +48,10 @@ class MemorySegmentContext(
             memoryOffset = 0L,
             memorySize = capacity,
             readOnly = memorySegment.isReadOnly(),
-            lockRegistry = locks,
+            locks = locks,
+            compact = compact,
         ),
-        maxBlockByteSize = blockSize
+        maxBlockByteSize = blockSize,
     )
 
     val mappers: MemoryMapperRegistry = MemoryMapperRegistry(ledger)

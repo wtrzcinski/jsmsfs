@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,19 +17,21 @@
 package org.wtrzcinski.files.memory.provider
 
 import org.wtrzcinski.files.memory.MemorySegmentFileSystem
-import org.wtrzcinski.files.memory.mode.AbstractCloseable
+import org.wtrzcinski.files.memory.mode.ModeState
 import org.wtrzcinski.files.memory.path.FilePath
 import org.wtrzcinski.files.memory.path.HardFilePath
 import org.wtrzcinski.files.memory.provider.MemoryFileAttributes.Companion.basic
 import org.wtrzcinski.files.memory.provider.MemoryFileAttributes.Companion.owner
 import org.wtrzcinski.files.memory.provider.MemoryFileAttributes.Companion.posix
 import org.wtrzcinski.files.memory.provider.MemoryFileAttributes.Companion.user
+import org.wtrzcinski.files.memory.util.RegexUtil
 import java.io.File
 import java.nio.file.FileSystem
 import java.nio.file.Path
 import java.nio.file.PathMatcher
 import java.nio.file.WatchService
 import java.nio.file.attribute.UserPrincipalLookupService
+import java.util.regex.Pattern
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.io.path.fileStore
 
@@ -40,7 +42,12 @@ data class MemoryFileSystem(
     val provider: MemoryFileSystemProvider,
 ) : FileSystem() {
 
-    private val monitor = AbstractCloseable()
+    companion object {
+        const val GLOB_SYNTAX: String = "glob"
+        const val REGEX_SYNTAX: String = "regex"
+    }
+
+    private val monitor = ModeState()
 
     val delegate: MemorySegmentFileSystem
         get() {
@@ -99,13 +106,34 @@ data class MemoryFileSystem(
         return setOf(basic, posix, user, owner)
     }
 
-    //    todo test Files#setOwner(Path path, UserPrincipal owner)
-    override fun getUserPrincipalLookupService(): UserPrincipalLookupService {
-        TODO("Not yet implemented")
+    /**
+     * @see jdk.nio.zipfs.ZipFileSystem.getPathMatcher
+     */
+    override fun getPathMatcher(syntaxAndInput: String): PathMatcher {
+        val pos: Int = syntaxAndInput.indexOf(':')
+        require(pos > 0)
+        val syntax = syntaxAndInput.substring(0, pos)
+        val input = syntaxAndInput.substring(pos + 1)
+        val expr: String?
+        if (syntax.equals(GLOB_SYNTAX, ignoreCase = true)) {
+            expr = RegexUtil.toRegexPattern(input)
+        } else if (syntax.equals(REGEX_SYNTAX, ignoreCase = true)) {
+            expr = input
+        } else {
+            throw UnsupportedOperationException("Syntax '$syntax' not recognized")
+        }
+
+        // return matcher
+        val pattern = Pattern.compile(expr)
+        return PathMatcher { path: Path ->
+            val toUri = path.toUri()
+            val uriPath = toUri.path
+            pattern.matcher(uriPath).matches()
+        }
     }
 
-    //    todo test Files#newDirectoryStream(Path dir, String glob)
-    override fun getPathMatcher(syntaxAndPattern: String?): PathMatcher? {
+    //    todo test Files#setOwner(Path path, UserPrincipal owner)
+    override fun getUserPrincipalLookupService(): UserPrincipalLookupService {
         TODO("Not yet implemented")
     }
 

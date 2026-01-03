@@ -16,7 +16,7 @@
 
 package org.wtrzcinski.files.memory.lock
 
-import org.wtrzcinski.files.memory.address.BlockStart
+import org.wtrzcinski.files.memory.address.BlockOffset
 import org.wtrzcinski.files.memory.provider.MemoryFileOpenOptions
 import org.wtrzcinski.files.memory.util.Check
 import java.util.concurrent.ConcurrentHashMap
@@ -31,24 +31,24 @@ class MemoryLockRegistry : AutoCloseable {
 
     val bitmapLock = MemoryFileLock(
         mode = MemoryFileOpenOptions.WRITE_TRUNCATE,
-        lock = ReadWriteMemoryFileLock(registry = this, start = BlockStart.InvalidAddress),
+        lock = ReadWriteMemoryFileLock(locks = this, start = BlockOffset.InvalidOffset),
     )
 
-    fun newLock(offset: BlockStart? = null, mode: MemoryFileOpenOptions): MemoryFileLock {
+    fun newLock(offset: BlockOffset? = null, mode: MemoryFileOpenOptions): MemoryFileLock {
         var localOffset = offset
         if (localOffset == null) {
-            localOffset = BlockStart.InvalidAddress
+            localOffset = BlockOffset.InvalidOffset
         }
 
         val compute = locks.compute(localOffset.start) { _, value ->
-            val lock = value ?: ReadWriteMemoryFileLock(registry = this, start = BlockStart(offset = localOffset.start))
+            val lock = value ?: ReadWriteMemoryFileLock(locks = this, start = BlockOffset(offset = localOffset.start))
             lock.refs.incrementAndFetch()
             return@compute lock
         }
         return MemoryFileLock(mode, compute as ReadWriteMemoryFileLock)
     }
 
-    fun releaseLock(offset: BlockStart, mode: MemoryFileOpenOptions) {
+    fun releaseLock(offset: BlockOffset, mode: MemoryFileOpenOptions) {
         locks.compute(offset.start) { _, value ->
             val refs = value?.refs?.decrementAndFetch() ?: 0
             if (refs == 0) {

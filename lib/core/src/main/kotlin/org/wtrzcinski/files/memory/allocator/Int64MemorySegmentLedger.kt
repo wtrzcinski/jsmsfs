@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,15 +17,15 @@
 package org.wtrzcinski.files.memory.allocator
 
 import org.wtrzcinski.files.memory.MemorySegmentLedger
-import org.wtrzcinski.files.memory.address.BlockStart
+import org.wtrzcinski.files.memory.address.BlockOffset
 import org.wtrzcinski.files.memory.address.ByteSize
 import org.wtrzcinski.files.memory.bitmap.BitmapRegistry
-import org.wtrzcinski.files.memory.buffer.chunk.LongReadWriteBuffer
-import org.wtrzcinski.files.memory.buffer.chunk.ChunkReadWriteBuffer
+import org.wtrzcinski.files.memory.buffer.ContinuousReadWriteBuffer
+import org.wtrzcinski.files.memory.buffer.LongContinuousReadWriteBuffer
 import org.wtrzcinski.files.memory.mapper.MemoryMapperRegistry.Companion.longByteSize
 import java.lang.foreign.MemorySegment
 
-internal class LongMemoryLedger(
+internal class Int64MemorySegmentLedger(
     memory: MemorySegment,
     bitmap: BitmapRegistry,
     maxBlockByteSize: ByteSize,
@@ -33,18 +33,13 @@ internal class LongMemoryLedger(
     memory = memory,
     bitmap = bitmap,
     maxBlockSize = maxBlockByteSize,
+    sizeBytes = longByteSize,
+    offsetBytes = longByteSize,
 ) {
 
-    override val sizeBytes: ByteSize = longByteSize
-
-    override val offsetBytes: ByteSize = longByteSize
-
-    init {
-        require(maxBlockByteSize >= headerBytes)
+    override fun continuousBuffer(address: BlockOffset, start: BlockOffset, size: ByteSize): ContinuousReadWriteBuffer {
+        val asSlice: MemorySegment = memory.asSlice(start.start, size.size)
+        return LongContinuousReadWriteBuffer(memorySegment = asSlice, address = address, release = { this.releaseAll(it.flip()) })
     }
 
-    override fun directBuffer(start: BlockStart, size: ByteSize): ChunkReadWriteBuffer {
-        val asSlice: MemorySegment = this@LongMemoryLedger.memory.asSlice(start.start, size.size)
-        return LongReadWriteBuffer(memorySegment = asSlice, release = { this.release(it.flip()) })
-    }
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,57 +16,16 @@
 
 package org.wtrzcinski.files.memory.mapper
 
-import org.wtrzcinski.files.memory.MemorySegmentLedger
 import org.wtrzcinski.files.memory.address.Block
-import org.wtrzcinski.files.memory.address.BlockStart
+import org.wtrzcinski.files.memory.address.BlockOffset
 import org.wtrzcinski.files.memory.address.ByteSize
-import org.wtrzcinski.files.memory.buffer.chunk.ChunkReadWriteBuffer
+import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer
 
-class MemoryHeaderMapper(
-    val memory: MemorySegmentLedger,
-    val offset: BlockStart,
-    val bodySizeBuffer: ChunkReadWriteBuffer,
-    val nextOffsetBuffer: ChunkReadWriteBuffer,
+data class MemoryHeaderMapper(
+    val offset: BlockOffset,
+    val bodySizeBuffer: MemoryReadWriteBuffer,
+    val nextOffsetBuffer: MemoryReadWriteBuffer,
 ) : Mapper, Block {
-    companion object {
-        fun newHeader(memory: MemorySegmentLedger, offset: BlockStart, bodySize: ByteSize): MemoryHeaderMapper {
-            val bodySizeBuffer: ChunkReadWriteBuffer = bodySizeBuffer(memory, offset)
-            bodySizeBuffer.writeSize(value = bodySize)
-            val nextOffsetBuffer: ChunkReadWriteBuffer = nextOffsetBuffer(memory, offset)
-            nextOffsetBuffer.writeOffset(value = BlockStart.InvalidAddress)
-            return MemoryHeaderMapper(
-                memory = memory,
-                offset = offset,
-                bodySizeBuffer = bodySizeBuffer,
-                nextOffsetBuffer = nextOffsetBuffer
-            )
-        }
-
-        fun existingHeader(memory: MemorySegmentLedger, offset: BlockStart): MemoryHeaderMapper {
-            val bodySizeBuffer: ChunkReadWriteBuffer = bodySizeBuffer(memory, offset)
-            val nextOffsetBuffer: ChunkReadWriteBuffer = nextOffsetBuffer(memory, offset)
-            return MemoryHeaderMapper(
-                memory = memory,
-                offset = offset,
-                bodySizeBuffer = bodySizeBuffer,
-                nextOffsetBuffer = nextOffsetBuffer
-            )
-        }
-
-        private fun bodySizeBuffer(dataRegistry: MemorySegmentLedger, offset: BlockStart): ChunkReadWriteBuffer {
-            return dataRegistry.directBuffer(
-                start = offset,
-                size = dataRegistry.sizeBytes,
-            )
-        }
-
-        private fun nextOffsetBuffer(dataRegistry: MemorySegmentLedger, offset: BlockStart): ChunkReadWriteBuffer {
-            return dataRegistry.directBuffer(
-                start = offset + dataRegistry.sizeBytes,
-                size = dataRegistry.offsetBytes,
-            )
-        }
-    }
 
     override val start: Long
         get() {
@@ -75,7 +34,7 @@ class MemoryHeaderMapper(
 
     override val size: Long
         get() {
-            return memory.headerBytes.size
+            return bodySizeBuffer.size() + nextOffsetBuffer.size()
         }
 
     val readBodySize: ByteSize
@@ -85,7 +44,7 @@ class MemoryHeaderMapper(
             return byteBuffer.readSize()
         }
 
-    val readNextOffset: BlockStart?
+    val readNextOffset: BlockOffset?
         get() {
             val byteBuffer = nextOffsetBuffer
             byteBuffer.clear()
@@ -96,7 +55,10 @@ class MemoryHeaderMapper(
             return null
         }
 
-    override fun flip(): BlockStart {
+    override fun close() {
+    }
+
+    override fun flip(): BlockOffset {
         return offset
     }
 }

@@ -17,14 +17,14 @@
 package org.wtrzcinski.files.memory.mapper
 
 import org.wtrzcinski.files.memory.MemorySegmentLedger
-import org.wtrzcinski.files.memory.address.BlockStart
+import org.wtrzcinski.files.memory.address.BlockOffset
 import org.wtrzcinski.files.memory.exception.MemoryIllegalStateException
 import org.wtrzcinski.files.memory.mapper.MemoryMapperRegistry.Companion.intByteSize
-import org.wtrzcinski.files.memory.mode.AbstractCloseable
+import org.wtrzcinski.files.memory.mode.ModeState
 
-class NameMapper(
+class StringMapper(
     private val memory: MemorySegmentLedger,
-) : BlockBodyMapper, AbstractCloseable() {
+) : BlockBodyMapper, ModeState() {
 
     private var name: String? = null
 
@@ -32,21 +32,22 @@ class NameMapper(
         this.name = name
     }
 
-    override fun flip(): BlockStart {
-        if (tryClose()) {
+    override fun flip(): BlockOffset {
+        if (tryFlip()) {
             val localName = name
             if (localName == null) {
-                return BlockStart.InvalidAddress
+                return BlockOffset.InvalidOffset
             } else {
                 val bodyAlignment = intByteSize + (localName.length * 4)
-                val newByteChannel = memory.newBuffer(name = localName, bodyAlignment = bodyAlignment)
+                val newByteChannel = memory.allocateChannel(bodyAlignment = bodyAlignment)
                 newByteChannel.use {
                     newByteChannel.writeString(localName)
                 }
-                return newByteChannel.first()
+                return newByteChannel.address()
             }
+        } else {
+            throw MemoryIllegalStateException()
         }
-        throw MemoryIllegalStateException()
     }
 }
 

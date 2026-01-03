@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 
 package org.wtrzcinski.files.memory.util
 
+import org.wtrzcinski.files.memory.MemorySegmentContext.Companion.DefaultBlockSize
+import org.wtrzcinski.files.memory.buffer.FragmentedReadWriteBuffer
 import java.nio.ByteBuffer.allocate
 import java.nio.channels.ReadableByteChannel
 import java.nio.channels.WritableByteChannel
@@ -23,17 +25,21 @@ import java.nio.channels.WritableByteChannel
 object IOUtil {
 
     fun transfer(sourceByteBuffer: ReadableByteChannel, targetByteBuffer: WritableByteChannel): Int {
-        var result = 0
-        val buffer = allocate(1024 * 4)
-        while (true) {
-            buffer.clear()
-            val length = sourceByteBuffer.read(buffer)
-            if (length < 0) {
-                return result
+        if (sourceByteBuffer is FragmentedReadWriteBuffer && targetByteBuffer is FragmentedReadWriteBuffer) {
+            return targetByteBuffer.write(sourceByteBuffer)
+        } else {
+            var result = 0
+            val buffer = allocate(DefaultBlockSize.toInt())
+            while (true) {
+                buffer.clear()
+                val length = sourceByteBuffer.read(buffer)
+                if (length < 0) {
+                    return result
+                }
+                result += length
+                buffer.flip()
+                targetByteBuffer.write(buffer)
             }
-            result += length
-            buffer.flip()
-            targetByteBuffer.write(buffer)
         }
     }
 }

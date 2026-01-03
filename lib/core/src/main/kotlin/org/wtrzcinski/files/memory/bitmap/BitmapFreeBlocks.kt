@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,7 +29,9 @@ import kotlin.concurrent.atomics.minusAssign
 import kotlin.concurrent.atomics.plusAssign
 
 @OptIn(ExperimentalAtomicApi::class)
-class BitmapFreeBlocks {
+class BitmapFreeBlocks(
+    val compact: Boolean,
+) {
 
     interface FindStrategy {
         fun find(free: BitmapFreeBlocks): Block
@@ -63,7 +65,7 @@ class BitmapFreeBlocks {
 
         Check.isNull { findByStartOffset(current.middle) }
 
-        val next = findByStartOffset(current.end)
+        val next = findByStartOffset(current.endExclusive)
         if (next != null) {
             remove(next)
             val join = current.plus(next)
@@ -83,7 +85,7 @@ class BitmapFreeBlocks {
     private fun doAdd(other: BitmapEntry): BitmapFreeBlocks {
         this.freeSize += other.size
         this.byStartOffset[other.start] = other
-        this.byEndOffset[other.end] = other
+        this.byEndOffset[other.endExclusive] = other
         val bySizeList = this.bySize.computeIfAbsent(other.size) { CopyOnWriteArrayList() }
         bySizeList.add(other)
         return this
@@ -91,7 +93,7 @@ class BitmapFreeBlocks {
 
     fun remove(other: Block) {
         this.byStartOffset.remove(other.start) ?: throw OptimisticLockException()
-        this.byEndOffset.remove(other.end) ?: throw OptimisticLockException()
+        this.byEndOffset.remove(other.endExclusive) ?: throw OptimisticLockException()
         val bySizeList = this.bySize[other.size] ?: throw OptimisticLockException()
         bySizeList.remove(other)
         if (bySizeList.isEmpty()) {
@@ -100,11 +102,20 @@ class BitmapFreeBlocks {
         this.freeSize -= other.size
     }
 
-    fun findBySize(minByteSize: ByteSize, maxByteSize: ByteSize): BitmapEntry {
+    fun findBySize(minByteSize: ByteSize, maxByteSize: ByteSize, prev: BitmapEntry): BitmapEntry {
         Check.isTrue { minByteSize <= maxByteSize }
 
         if (size < maxByteSize) {
             throw OutOfMemoryException()
+        }
+
+        if (compact) {
+            val entry = byStartOffset[prev.endExclusive]
+            if (entry != null) {
+                if (entry.size >= minByteSize.size) {
+                    return entry
+                }
+            }
         }
 
         run {

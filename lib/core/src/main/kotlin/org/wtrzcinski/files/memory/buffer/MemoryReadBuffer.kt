@@ -16,18 +16,24 @@
 
 package org.wtrzcinski.files.memory.buffer
 
-import org.wtrzcinski.files.memory.address.BlockStart
+import org.wtrzcinski.files.memory.address.Block.Companion.InvalidRef
+import org.wtrzcinski.files.memory.address.BlockOffset
 import org.wtrzcinski.files.memory.address.ByteSize
-import org.wtrzcinski.files.memory.allocator.IntMemoryLedger.Companion.MaxUnsignedIntInclusive
-import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer.Companion.InvalidRef
 import org.wtrzcinski.files.memory.util.Check
+import java.nio.ByteBuffer
 import java.nio.charset.Charset
 import java.time.Instant
 
 @Suppress("unused")
-interface MemoryReadBuffer {
+sealed interface MemoryReadBuffer {
 
-    fun readOffset(): BlockStart?
+    companion object {
+        //        -1L is reserved for invalid references
+        val MaxUnsignedIntInclusive: Long = Integer.toUnsignedLong(-1) - 1L
+        val unsignedIntRange: LongRange = 0..MaxUnsignedIntInclusive
+    }
+
+    fun readOffset(): BlockOffset?
 
     fun readSize(): ByteSize
 
@@ -35,7 +41,12 @@ interface MemoryReadBuffer {
 
     fun readInt(): Int
 
-    fun read(dst: ByteArray): Int
+    fun read(dst: ByteBuffer, length: ByteSize): Int
+
+    fun read(dst: ByteArray): Int {
+        val dst1 = ByteBuffer.wrap(dst)
+        return read(dst1, ByteSize(dst1.remaining()))
+    }
 
     fun readUnsignedInt(): Long? {
         val intValue = readInt()
@@ -43,15 +54,12 @@ interface MemoryReadBuffer {
             return null
         }
         val value = Integer.toUnsignedLong(intValue)
-        Check.isTrue {
-            val range: LongRange = 0..MaxUnsignedIntInclusive
-            value in range
-        }
+        Check.isTrue { value in unsignedIntRange }
         return value
     }
 
-    fun readRefs(): Sequence<BlockStart> {
-        val existing = mutableListOf<BlockStart>()
+    fun readRefs(): Sequence<BlockOffset> {
+        val existing = mutableListOf<BlockOffset>()
         val count = readInt()
         repeat(count) {
             val element = readOffset()
@@ -69,31 +77,18 @@ interface MemoryReadBuffer {
 
     fun readString(charset: Charset = Charsets.UTF_8): String {
         val length = readInt()
-        val dst = ByteArray(length)
-        val read = read(dst)
+        if (length == 0) {
+            return ""
+        }
+        val dst = ByteBuffer.allocate(length)
+        val read = read(dst, ByteSize(length))
         Check.isTrue { read == length }
-        val result = String(dst, charset)
-        return result
+        return String(dst.array(), charset)
     }
 
-    fun readMap(charset: Charset = Charsets.UTF_8): Map<String, String> {
-        val map = mutableMapOf<String, String>()
-        val size = readInt()
-        repeat(size) {
-            val key = readString(charset)
-            val value = readString(charset)
-            map[key] = value
-        }
-        return map
-    }
+    fun skipRemaining(): Long
 
-    fun readList(charset: Charset = Charsets.UTF_8): List<String> {
-        val list = mutableListOf<String>()
-        val size = readInt()
-        repeat(size) {
-            val key = readString(charset)
-            list.add(key)
-        }
-        return list
+    fun skipInt() {
+        readInt()
     }
 }

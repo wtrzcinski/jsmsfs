@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,14 @@
 
 package org.wtrzcinski.files.memory.address
 
-import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer.Companion.InvalidRef
-import org.wtrzcinski.files.memory.exception.MemoryIllegalArgumentException
 import org.wtrzcinski.files.memory.bitmap.BitmapEntry
+import org.wtrzcinski.files.memory.exception.MemoryIllegalArgumentException
 
-interface Block : BlockStart, BlockSize {
+interface Block : BlockOffset, BlockSize, OpenEndRange<Long> {
 
     companion object {
+        const val InvalidRef: Long = -1
+
         val InvalidBlock = DefaultBlock(start = InvalidRef, size = InvalidRef)
 
         fun of(byteOffset: Long, byteSize: Long): DefaultBlock {
@@ -34,21 +35,27 @@ interface Block : BlockStart, BlockSize {
         }
     }
 
-    val middle: Long get() = (start + end) / 2
+    override val start: Long
 
-    val end: Long get() = start + size
+    override val endExclusive: Long get() = start + size
 
-    operator fun contains(other: BlockStart): Boolean {
-        return this.start <= other.start && other.start <= this.end
+    val middle: Long get() = (start + endExclusive) / 2
+
+    override fun isEmpty(): Boolean {
+        return size == 0L
+    }
+
+    operator fun contains(other: BlockOffset): Boolean {
+        return this.start <= other.start && other.start <= this.endExclusive
     }
 
     operator fun contains(other: Block): Boolean {
-        return this.start <= other.start && other.end <= this.end
+        return this.start <= other.start && other.endExclusive <= this.endExclusive
     }
 
     operator fun minus(other: Block): DefaultBlock {
-        val thisEnd = this.end
-        val otherEnd = other.end
+        val thisEnd = this.endExclusive
+        val otherEnd = other.endExclusive
         if (thisEnd == otherEnd) {
             return BitmapEntry(start = start, size = size - other.size)
         }
@@ -71,7 +78,7 @@ interface Block : BlockStart, BlockSize {
     }
 
     operator fun plus(next: Block): DefaultBlock {
-        if (this.end == next.start) {
+        if (this.endExclusive == next.start) {
             return DefaultBlock(
                 start = this.start,
                 size = this.size + next.size,
