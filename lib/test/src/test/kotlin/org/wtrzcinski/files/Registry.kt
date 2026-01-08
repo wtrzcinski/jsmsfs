@@ -17,11 +17,12 @@
 package org.wtrzcinski.files
 
 import org.assertj.core.api.Assertions
-import org.wtrzcinski.files.memory.node.DirectoryNode
-import org.wtrzcinski.files.memory.path.AbstractFilePath
+import org.wtrzcinski.files.memory.mapper.NodeType
+import org.wtrzcinski.files.memory.provider.MemoryFilePathAdapter
 import org.wtrzcinski.files.memory.path.HardFilePath
 import org.wtrzcinski.files.memory.util.Require
 import java.nio.file.Files
+import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.util.concurrent.ConcurrentHashMap
@@ -30,14 +31,14 @@ import kotlin.random.Random
 
 class Registry {
     val regular = ConcurrentHashMap<Path, String>()
-    private val links = ConcurrentHashMap<HardFilePath, Path>()
+    val links = ConcurrentHashMap<Path, Path>()
     val directories = CopyOnWriteArrayList<Path>()
 
     fun count(): Int {
         return regular.size + directories.size + links.size
     }
 
-    fun addDirectory(root: HardFilePath) {
+    fun addDirectory(root: Path) {
         directories.add(root)
     }
 
@@ -55,12 +56,12 @@ class Registry {
             val link = entry.key
             val file = entry.value
             if (Files.exists(file)) {
-                val fileContent = regular[file]
-                val actual = Files.readString(file)
+                val fileContent = Files.readString(file)
+                val actual = Files.readString(link)
                 Assertions.assertThat(actual).isEqualTo(fileContent)
             } else {
-//                val actual = Files.readString(file)
-//                Assertions.assertThat(actual).isEqualTo("")
+                val exception = Assertions.catchException { Files.readString(link) }
+                Assertions.assertThat(exception).isInstanceOf(NoSuchFileException::class.java)
             }
         }
     }
@@ -83,29 +84,33 @@ class Registry {
     }
 
     tailrec fun deleteRandom(directory: Path): Boolean {
-        if (directory is HardFilePath) {
-            val node = directory.node
-            require(node is DirectoryNode)
+        require(directory is MemoryFilePathAdapter)
+        val delegate = directory.delegate
+        if (delegate is HardFilePath) {
+            val node = delegate.node
+            require(node.readType() == NodeType.Directory)
         }
 
         val children = Files.list(directory).toList()
         if (children.isEmpty()) {
-            Files.delete(directory)
             require(directories.remove(directory))
+            Files.delete(directory)
             return true
         } else {
             val file = children.random()
-            require(file is HardFilePath)
+            require(file is MemoryFilePathAdapter)
+            require(file.delegate is HardFilePath)
 
             if (Files.isDirectory(file)) {
                 return deleteRandom(directory = file)
             } else if (Files.isRegularFile(file)) {
+                val value = regular.remove(file)
+                requireNotNull(value)
                 Files.delete(file)
-                requireNotNull(regular.remove(file))
                 return true
             } else if (Files.isSymbolicLink(file)) {
-                Files.delete(file)
                 requireNotNull(links.remove(file))
+                Files.delete(file)
                 return true
             }
         }
@@ -126,7 +131,7 @@ class Registry {
         val createFile = Files.createFile(child)
         Files.writeString(createFile, childContent, StandardOpenOption.WRITE)
         Assertions.assertThat(Files.exists(createFile)).isTrue()
-        require(createFile is AbstractFilePath)
+        require(createFile is MemoryFilePathAdapter)
         regular[createFile.toRealPath()] = childContent
     }
 
@@ -138,7 +143,7 @@ class Registry {
         val child = parent.resolve(childName)
         val createDirectory = Files.createDirectory(child)
         Assertions.assertThat(Files.exists(createDirectory)).isTrue()
-        require(createDirectory is AbstractFilePath)
+        require(createDirectory is MemoryFilePathAdapter)
         directories.add(createDirectory.toRealPath())
     }
 
@@ -152,7 +157,7 @@ class Registry {
         if (randomFile != null) {
             val createSymbolicLink = Files.createSymbolicLink(child, randomFile)
             Assertions.assertThat(Files.exists(createSymbolicLink)).isTrue()
-            require(createSymbolicLink is AbstractFilePath)
+            require(createSymbolicLink is MemoryFilePathAdapter)
             links[createSymbolicLink.toRealPath()] = randomFile
         }
     }

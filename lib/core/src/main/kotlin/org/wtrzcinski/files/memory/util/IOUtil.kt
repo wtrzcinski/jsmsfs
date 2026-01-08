@@ -16,7 +16,7 @@
 
 package org.wtrzcinski.files.memory.util
 
-import org.wtrzcinski.files.memory.MemorySegmentContext.Companion.DefaultBlockSize
+import org.wtrzcinski.files.memory.MemorySegmentContext.Companion.DefaultMaxBlockSize
 import org.wtrzcinski.files.memory.buffer.FragmentedReadWriteBuffer
 import java.nio.ByteBuffer.allocate
 import java.nio.channels.ReadableByteChannel
@@ -29,7 +29,7 @@ object IOUtil {
             return targetByteBuffer.write(sourceByteBuffer)
         } else {
             var result = 0
-            val buffer = allocate(DefaultBlockSize.toInt())
+            val buffer = allocate(DefaultMaxBlockSize.toInt())
             while (true) {
                 buffer.clear()
                 val length = sourceByteBuffer.read(buffer)

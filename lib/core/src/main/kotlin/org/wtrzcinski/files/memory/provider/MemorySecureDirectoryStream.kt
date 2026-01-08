@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,20 +16,24 @@
 
 package org.wtrzcinski.files.memory.provider
 
-import org.wtrzcinski.files.memory.path.HardFilePath
 import java.nio.channels.SeekableByteChannel
 import java.nio.file.*
 import java.nio.file.attribute.FileAttribute
 import java.nio.file.attribute.FileAttributeView
 
 internal class MemorySecureDirectoryStream(
-    private val parent: HardFilePath,
+    private val parent: MemoryFilePathAdapter,
     private val filter: DirectoryStream.Filter<in Path>,
     private val delegate: DirectoryStream<Path> = MemoryDirectoryStream(parent, filter),
 ) : DirectoryStream<Path> by delegate, SecureDirectoryStream<Path> {
 
     override fun newDirectoryStream(path: Path, vararg options: LinkOption): SecureDirectoryStream<Path> {
-        TODO("Not yet implemented")
+        require(path is MemoryFilePathAdapter)
+
+        val absolutePath = parent.resolve(path)
+        require(filter.accept(absolutePath))
+
+        return MemorySecureDirectoryStream(parent = absolutePath, filter = filter, delegate = delegate)
     }
 
     override fun newByteChannel(path: Path, options: Set<OpenOption>, vararg attrs: FileAttribute<*>): SeekableByteChannel {
@@ -37,6 +41,8 @@ internal class MemorySecureDirectoryStream(
     }
 
     override fun deleteFile(path: Path) {
+        require(path is MemoryFilePathAdapter)
+
         val absolutePath = parent.resolve(path)
         require(filter.accept(absolutePath))
 
@@ -45,10 +51,12 @@ internal class MemorySecureDirectoryStream(
     }
 
     override fun deleteDirectory(path: Path) {
+        require(path is MemoryFilePathAdapter)
+
         val absolutePath = parent.resolve(path)
         require(filter.accept(absolutePath))
 
-        val provider = parent.fileSystem.provider()
+        val provider = path.fileSystem.provider()
         provider.delete(absolutePath)
     }
 

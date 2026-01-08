@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,26 +16,17 @@
 
 package org.wtrzcinski.files.memory.path
 
-import org.wtrzcinski.files.memory.node.DirectoryNode
+import org.wtrzcinski.files.memory.MemorySegmentFileSystem
+import org.wtrzcinski.files.memory.mapper.NodeMapper
+import org.wtrzcinski.files.memory.mapper.NodeType
 import org.wtrzcinski.files.memory.util.Check
 import org.wtrzcinski.files.memory.util.Require
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.Path
-import kotlin.io.path.isDirectory
 
 sealed interface FilePath {
     companion object {
-        fun Path.deleteRecursively() {
-            if (this.isDirectory()) {
-                Files.list(this).forEach { sub ->
-                    sub.deleteRecursively()
-                }
-            }
-            Files.delete(this)
-        }
 
-        fun getPath(root: HardFilePath, path: String, vararg more: String): Path {
+        fun resolve(root: FilePath, path: String, vararg more: String): FilePath {
             if (path == File.separator) {
                 if (more.isEmpty()) {
                     return root
@@ -44,12 +35,10 @@ sealed interface FilePath {
 
             val split = path.split(File.separator)
             val join = split + more
-            return FilePath.resolve(root, join)
+            return resolve(root, join)
         }
 
-        fun resolve(current: AbstractFilePath, other: Path): Path {
-            require(other is AbstractFilePath)
-
+        fun resolve(current: FilePath, other: FilePath): FilePath {
             val otherName = other.name
             if (otherName.isBlank()) {
                 return current
@@ -58,52 +47,49 @@ sealed interface FilePath {
             if (thisName.isBlank()) {
                 return other
             }
-            if (other.isAbsolute) {
+            if (other.isAbsolute()) {
                 return other
             }
-            return FilePath.resolve(current, otherName)
+            return resolve(current, otherName)
         }
 
-        fun resolve(current: AbstractFilePath, opath: String): Path {
-            val split = opath.split(File.separatorChar)
-            return FilePath.resolve(current, split)
+        fun resolve(current: FilePath, path: String): FilePath {
+            val split = path.split(File.separatorChar)
+            return resolve(current, split)
         }
 
-        fun resolve(current: AbstractFilePath, split: List<String>): Path {
+        fun resolve(current: FilePath, split: List<String>): FilePath {
             val names = split.filter { it.isNotEmpty() }
             if (names.isEmpty()) {
                 return current
             }
 
-            val provider = current.fileSystem.provider()
-            val actualFileSystem = provider.fileSystem
-            requireNotNull(actualFileSystem)
+            Check.isTrue { current.isAbsolute() }
 
-            Check.isTrue { current.isAbsolute }
-
-            var result: AbstractFilePath = current
+            var result: FilePath = current
             for (name in names) {
                 if (result is HardFilePath) {
                     val directory = result.node
-                    require(directory is DirectoryNode)
+                    require(directory.readType() == NodeType.Directory)
 
-                    val existingNode = actualFileSystem.findChildByName(directory, name)
+                    val existingNode = directory.findChildByName(name)
                     if (existingNode != null) {
                         result = HardFilePath(
-                            fs = current.fs,
-                            nodeRef = existingNode.offset,
+                            fileSystem = current.fileSystem,
+                            ref = existingNode.ref(),
                             parent = result,
+                            node = existingNode
                         )
                     } else {
                         result = SymbolicFilePath(
-                            fs = current.fs,
+                            fileSystem = current.fileSystem,
                             name = name,
                             parent = result,
                         )
                     }
                 } else if (result is SymbolicFilePath) {
                     result = SymbolicFilePath(
-                        fs = current.fs,
+                        fileSystem = current.fileSystem,
                         name = name,
                         parent = result,
                     )
@@ -117,9 +103,17 @@ sealed interface FilePath {
 
     val name: String
 
-    fun getParent(): FilePath?
+    val type: NodeType
 
-    fun exists(): Boolean
+    val parent: FilePath?
+
+    val fileSystem: MemorySegmentFileSystem
+
+    fun toRealPath(): HardFilePath
+
+    fun isAbsolute(): Boolean
+
+    fun toAbsolutePath(): FilePath
 
     fun isDirectory(): Boolean
 
@@ -136,8 +130,34 @@ sealed interface FilePath {
             if (name != File.separator && name.isNotEmpty()) {
                 names.add(name)
             }
-            current = current.getParent()
+            current = current.parent
         }
         return names.reversed()
+    }
+
+    fun getAncestors(): List<FilePath> {
+        val result = mutableListOf<FilePath>()
+        var current: FilePath? = this
+        while (current != null) {
+            result.add(current)
+            current = current.parent
+        }
+        return result.reversed()
+    }
+
+    fun exists(): Boolean {
+        return findNode() != null
+    }
+
+    fun findNode(): NodeMapper? {
+        val realParent = parent?.toRealPath()
+        checkNotNull(realParent)
+        if (!realParent.exists()) {
+            return null
+        }
+        val parentNode = realParent.node
+        check(realParent.type == NodeType.Directory)
+
+        return parentNode.findChildByName(name = name)
     }
 }

@@ -17,9 +17,13 @@
 package org.wtrzcinski.files.memory.bitmap
 
 import org.wtrzcinski.files.memory.address.Block
+import org.wtrzcinski.files.memory.address.BlockAddress
 import org.wtrzcinski.files.memory.address.ByteSize
 import org.wtrzcinski.files.memory.lock.MemoryLockRegistry
 import org.wtrzcinski.files.memory.mode.Mode
+import org.wtrzcinski.files.memory.mode.OpenMode
+import org.wtrzcinski.files.memory.mode.ReadMode
+import org.wtrzcinski.files.memory.mode.WriteMode
 
 interface BitmapRegistry {
 
@@ -31,7 +35,11 @@ interface BitmapRegistry {
 
     fun isReadOnly(): Boolean
 
-    fun allocate(name: String, minBlockSize: ByteSize, maxBlockSize: ByteSize, prev: BitmapEntry): BitmapEntry
+    fun isReserved(ref: BlockAddress): Boolean
+
+    fun allocate(range: ClosedRange<ByteSize>, prev: BitmapEntry? = null): BitmapEntry
+
+    fun allocate(range: ClosedRange<ByteSize>, exactBlockSize: ByteSize, prev: BitmapEntry? = null): BitmapEntry
 
     fun release(block: Block)
 
@@ -47,7 +55,11 @@ interface BitmapRegistry {
                 offset = memoryOffset,
                 totalByteSize = memorySize,
                 locks = locks,
-                mode = Mode.of(readOnly),
+                mode = if (readOnly) {
+                    Mode.read()
+                } else {
+                    Mode(OpenMode.Post, WriteMode.TruncateExisting, ReadMode.Block)
+                },
                 compact = compact,
             )
         }

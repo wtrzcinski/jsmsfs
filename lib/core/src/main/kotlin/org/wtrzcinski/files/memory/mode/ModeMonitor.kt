@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,8 +24,8 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
 @Suppress("unused")
-open class ModeState(
-    mode: Mode = Mode.createRead(),
+open class ModeMonitor(
+    mode: Mode = Mode.create(),
 ) : Closeable {
 
     private val openModeAtomic = AtomicReference(mode.open)
@@ -46,20 +46,28 @@ open class ModeState(
         return !openMode.open
     }
 
-    fun isReadOnly(): Boolean {
-        return openMode == OpenMode.ReadOnly
+    fun isSafe(): Boolean {
+        return openMode.safe
     }
 
-    fun isReleased(): Boolean {
-        return openMode == OpenMode.Release
+    fun isIdempotent(): Boolean {
+        return openMode.idempotent
     }
 
-    fun isWritable(): Boolean {
-        return openMode.writeable
+    fun isCreating(): Boolean {
+        return openMode.create
     }
 
-    fun isReadable(): Boolean {
-        return openMode.readable
+    fun isUpdating(): Boolean {
+        return openMode.update
+    }
+
+    fun isDeleting(): Boolean {
+        return openMode == OpenMode.Delete
+    }
+
+    fun isReading(): Boolean {
+        return openMode.read
     }
 
     override fun close() {
@@ -71,52 +79,52 @@ open class ModeState(
     fun tryRelease(): Boolean {
         tryFlip()
         tryClose()
-        return moveMode(prevValue = OpenMode.Close, nextValue = OpenMode.Release)
+        return exchangeMode(prevValue = OpenMode.Unlock, nextValue = OpenMode.Delete)
     }
 
     fun tryClose(): Boolean {
         tryFlip()
-        return moveMode(prevValue = OpenMode.ReadOnly, nextValue = OpenMode.Close)
+        return exchangeMode(prevValue = OpenMode.Put, nextValue = OpenMode.Unlock)
     }
 
-    fun tryFlip(): Boolean {
-        return moveMode(prevValue = OpenMode.ReadWrite, nextValue = OpenMode.ReadOnly)
+    fun tryFlip(nextValue: OpenMode = OpenMode.Put): Boolean {
+        return exchangeMode(prevValue = OpenMode.Post, nextValue = OpenMode.Put)
     }
 
-    private fun moveMode(prevValue: OpenMode, nextValue: OpenMode): Boolean {
-        Check.isTrue { prevValue.ordinal == nextValue.ordinal - 1 }
+    private fun exchangeMode(prevValue: OpenMode, nextValue: OpenMode): Boolean {
+        Check.isTrue { prevValue.next().contains(nextValue) }
 
         return openModeAtomic.compareAndSet(expectedValue = prevValue, newValue = nextValue)
     }
 
-    fun checkIsOpen() {
+    fun throwIfNotOpen() {
         if (!isOpen()) {
             throwIllegalStateException()
         }
     }
 
-    fun checkIsClosed() {
+    fun throwIfNotClosed() {
         if (!isClosed()) {
             throwIllegalStateException()
         }
     }
 
-    fun checkIsWritable() {
-        checkIsOpen()
-        if (!isWritable()) {
+    fun throwIfNotWritable() {
+        throwIfNotOpen()
+        if (!isCreating() && !isUpdating()) {
             throwIllegalStateException()
         }
     }
 
-    fun checkIsReadable() {
-        checkIsOpen()
-        if (!isReadable()) {
+    fun throwIfNotReadable() {
+        throwIfNotOpen()
+        if (!isReading()) {
             throwIllegalStateException()
         }
     }
 
-    fun checkNotReleased() {
-        if (isReleased()) {
+    fun throwIfDeleting() {
+        if (isDeleting()) {
             throwIllegalStateException()
         }
     }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,9 @@
 
 package org.wtrzcinski.files.memory.address
 
-import org.wtrzcinski.files.memory.address.Block.Companion.InvalidRef
 import org.wtrzcinski.files.memory.exception.MemoryIllegalArgumentException
+import org.wtrzcinski.files.memory.schema.ValueHandler.Companion.InvalidRef
+import org.wtrzcinski.files.memory.schema.handler.FloatingInt
 
 data class ByteSize(
     private val value: Long,
@@ -32,6 +33,8 @@ data class ByteSize(
         fun readSize(any: Any?): ByteSize? {
             if (any == null) {
                 return null
+            } else if (any is Number) {
+                return ByteSize(value = any.toLong())
             } else if (any is ByteArray) {
                 val toString = String(any).trim()
                 return readSize(toString)
@@ -74,6 +77,10 @@ data class ByteSize(
 
     val size: Long = shift.convert(value)
 
+    fun asString(): String {
+        return size.toString()
+    }
+
     fun isValid(): Boolean {
         return size != InvalidRef
     }
@@ -94,6 +101,10 @@ data class ByteSize(
         return size.toDouble()
     }
 
+    fun toFloatingInt(bitCount: Int): FloatingInt {
+        return FloatingInt(bitCount, value = toLong())
+    }
+
     operator fun times(multiplier: Long): ByteSize {
         return ByteSize(this.size * multiplier)
     }
@@ -103,23 +114,23 @@ data class ByteSize(
     }
 
     operator fun plus(other: ByteSize): ByteSize {
-        return ByteSize(this.size + other.size)
+        return ByteSize(Math.addExact(this.size, other.size))
     }
 
     operator fun plus(other: Int): ByteSize {
-        return ByteSize(this.size + other)
+        return ByteSize(Math.addExact(this.size, other.toLong()))
     }
 
     operator fun plus(other: Long): ByteSize {
-        return ByteSize(this.size + other)
+        return ByteSize(Math.addExact(this.size, other))
     }
 
     operator fun minus(other: ByteSize): ByteSize {
-        return ByteSize(this.size - other.size)
+        return ByteSize(Math.subtractExact(this.size, other.size))
     }
 
     operator fun minus(other: Int): ByteSize {
-        return ByteSize(this.size - other)
+        return ByteSize(Math.subtractExact(this.size, other.toLong()))
     }
 
     override fun toString(): String {

@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -116,6 +116,7 @@ enum class MemoryScopeType {
 
     class HeapMemorySegmentFactory : MemorySegmentFactory {
         override fun allocate(byteSize: Long, byteAlignmen: Long): MemorySegment {
+            check(byteSize <= Int.MAX_VALUE)
             return MemorySegment.ofArray(ByteArray(byteSize.toInt()))
         }
 

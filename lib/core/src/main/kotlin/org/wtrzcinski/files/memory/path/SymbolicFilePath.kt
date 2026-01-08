@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,28 +16,30 @@
 
 package org.wtrzcinski.files.memory.path
 
-import org.wtrzcinski.files.memory.node.DirectoryNode
-import org.wtrzcinski.files.memory.node.ValidNode
-import org.wtrzcinski.files.memory.provider.MemoryFileSystem
+import org.wtrzcinski.files.memory.MemorySegmentFileSystem
+import org.wtrzcinski.files.memory.mapper.NodeMapper
+import org.wtrzcinski.files.memory.mapper.NodeType
 import org.wtrzcinski.files.memory.util.Require
-import java.nio.file.LinkOption
 import java.nio.file.NoSuchFileException
-import java.nio.file.Path
 
 class SymbolicFilePath(
-    fs: MemoryFileSystem,
+    override val fileSystem: MemorySegmentFileSystem,
     override val name: String,
-    private val parent: AbstractFilePath?,
+    override val parent: FilePath?,
     private val absolute: Boolean = true,
-) : AbstractFilePath(fs) {
+) : FilePath {
 
-    override fun getParent(): AbstractFilePath? {
-        return parent
+    override fun toRealPath(): HardFilePath {
+        val node = findNodeOrThrow()
+        return HardFilePath(
+            fileSystem = fileSystem,
+            ref = node.ref(),
+            parent = this.parent?.toRealPath(),
+            node = node,
+        )
     }
 
-    override fun exists(): Boolean {
-        return findNode() != null
-    }
+    override val type: NodeType = NodeType.Unknown
 
     override fun isDirectory(): Boolean {
         return false
@@ -47,38 +49,17 @@ class SymbolicFilePath(
         return absolute
     }
 
-    override fun toAbsolutePath(): Path {
-        if (this.isAbsolute) {
+    override fun toAbsolutePath(): FilePath {
+        if (this.isAbsolute()) {
             return this
         }
         Require.todo()
     }
 
-    override fun toRealPath(vararg options: LinkOption): HardFilePath {
-        val node = findNodeOrThrow()
-        val realParent = this.parent?.toRealPath()
-        return HardFilePath(
-            fs = fs,
-            nodeRef = node.offset,
-            parent = realParent,
-        )
-    }
-
     /**
      * @throws NoSuchFileException
      */
-    fun findNodeOrThrow(): ValidNode {
+    fun findNodeOrThrow(): NodeMapper {
         return findNode() ?: throw NoSuchFileException(toString())
-    }
-
-    fun findNode(): ValidNode? {
-        val actualFileSystem = fileSystem.provider().fileSystem
-        checkNotNull(actualFileSystem)
-
-        val realParent = this.parent?.toRealPath()
-        val parentNode = realParent?.node
-        require(parentNode is DirectoryNode)
-
-        return actualFileSystem.findChildByName(parent = parentNode, name = name)
     }
 }

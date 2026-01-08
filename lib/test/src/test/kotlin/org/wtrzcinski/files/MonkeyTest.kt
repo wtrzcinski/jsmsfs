@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,12 +23,12 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.slf4j.LoggerFactory
 import org.wtrzcinski.files.memory.address.ByteSize
-import org.wtrzcinski.files.memory.path.FilePath.Companion.deleteRecursively
-import org.wtrzcinski.files.memory.path.HardFilePath
+import org.wtrzcinski.files.memory.allocator.MemoryScopeType.GLOBAL
+import org.wtrzcinski.files.memory.provider.MemoryFilePathAdapter.Companion.deleteRecursively
 import org.wtrzcinski.files.memory.provider.MemoryFileStore
 import org.wtrzcinski.files.memory.provider.MemoryFileSystemProvider
 import org.wtrzcinski.files.memory.provider.MemoryFileSystemProvider.Companion.Capacity
-import org.wtrzcinski.files.memory.provider.MemoryFileSystemProvider.Companion.MaxBlockSize
+import org.wtrzcinski.files.memory.provider.MemoryFileSystemProvider.Companion.Scope
 import java.net.URI
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
@@ -37,12 +37,12 @@ import java.util.concurrent.TimeUnit
 internal class MonkeyTest {
 
     companion object {
+
         private val log = LoggerFactory.getLogger(MonkeyTest::class.java)
 
-        val capacity: Int = 4
-        val maxBlockSize: Int = 128
-        val minStringSize: Int = maxBlockSize * 2
-        val maxStringSize: Int = maxBlockSize * 4
+        val capacity: String = "4MB"
+        val minStringSize: Int = 256
+        val maxStringSize: Int = 512
         val repeats: Int = 2000 * 60
 
         private val registry = Registry()
@@ -50,10 +50,13 @@ internal class MonkeyTest {
         init {
             MemoryFileSystemProvider.newFileSystem(
                 uri = URI.create("jsmsfs:///"),
-                env = mapOf(Capacity to "${capacity}MB", MaxBlockSize to maxBlockSize)
+                env = mapOf(
+                    Scope to GLOBAL,
+                    Capacity to capacity,
+//                    MaxBlockSize to 128,
+                ),
             )
             val root = Path.of(URI.create("jsmsfs:///"))
-            require(root is HardFilePath)
             registry.addDirectory(root)
         }
     }
@@ -65,7 +68,7 @@ internal class MonkeyTest {
         val fileStore = parent.fileSystem.fileStores.first() as MemoryFileStore
         val used = ByteSize(fileStore.totalSpace - fileStore.unallocatedSpace)
         Assertions.assertThat(fileStore.used).isEqualTo(used)
-        Assertions.assertThat(used).isEqualTo(ByteSize(102))
+        Assertions.assertThat(used).isEqualTo(ByteSize(97))
     }
 
     @AfterEach
@@ -76,7 +79,7 @@ internal class MonkeyTest {
         val fileStore = parent.fileSystem.fileStores.first() as MemoryFileStore
         val used = ByteSize(fileStore.totalSpace - fileStore.unallocatedSpace)
         Assertions.assertThat(fileStore.used).isEqualTo(used)
-        Assertions.assertThat(used).isEqualTo(ByteSize(102))
+        Assertions.assertThat(used).isEqualTo(ByteSize(97))
     }
 
     @Test
@@ -91,14 +94,14 @@ internal class MonkeyTest {
             }
             registry.createRandom()
             registry.checkRandomFile()
-//            todo wojtek fix links
-//            registry.checkRandomLink()
+            registry.checkRandomLink()
         }
 
-        log.info("{} {} {}", registry.regular.size, registry.directories.size, registry.count())
-        log.info("{}", fileStore.reservedCount)
-        log.info("{}", fileStore.reservedSpaceFactor)
-        log.info("{}", fileStore.metadataSpaceFactor)
-        log.info("{}", fileStore.wastedSpaceFactor)
+        log.info("files {} + {} + {} = {}", registry.regular.size, registry.directories.size, registry.links.size, registry.count())
+        log.info("fragments: {}", fileStore.reservedCount)
+        log.info("reserved space {}", fileStore.reservedSpaceFactor)
+        log.info("metadata space {}", fileStore.metadataSpaceFactor)
+        log.info("wasted space {}", fileStore.wastedSpaceFactor)
     }
+
 }

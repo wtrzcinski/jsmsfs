@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,16 +16,16 @@
 
 package org.wtrzcinski.files.memory.address
 
-import org.wtrzcinski.files.memory.address.Block.Companion.InvalidRef
+import org.wtrzcinski.files.memory.schema.ValueHandler.Companion.InvalidRef
 
-interface BlockOffset : Comparable<BlockOffset> {
+interface BlockAddress : Comparable<BlockAddress> {
 
     companion object {
         val InvalidOffset: DefaultBlockOffset = DefaultBlockOffset(start = InvalidRef)
 
         val EmptyOffset: DefaultBlockOffset = DefaultBlockOffset(start = 0L)
 
-        operator fun invoke(offset: Long): BlockOffset {
+        operator fun invoke(offset: Long): BlockAddress {
             if (offset == InvalidOffset.start) {
                 return InvalidOffset
             }
@@ -42,23 +42,23 @@ interface BlockOffset : Comparable<BlockOffset> {
         return start != InvalidRef
     }
 
-    operator fun plus(other: BlockOffset): BlockOffset {
-        return invoke(this.start + other.start)
+    operator fun plus(other: BlockAddress): BlockAddress {
+        return invoke(Math.addExact(this.start, other.start))
     }
 
-    operator fun plus(other: BlockSize): BlockOffset {
-        return invoke(this.start + other.size)
+    operator fun plus(other: BlockSize): BlockAddress {
+        return invoke(Math.addExact(this.start, other.size))
     }
 
-    operator fun plus(other: ByteSize): BlockOffset {
-        return invoke(this.start + other.size)
+    operator fun plus(other: ByteSize): BlockAddress {
+        return invoke(Math.addExact(this.start, other.size))
     }
 
-    operator fun plus(other: Long): BlockOffset {
-        return invoke(this.start + other)
+    operator fun plus(other: Long): BlockAddress {
+        return invoke(Math.addExact(this.start, other))
     }
 
-    override fun compareTo(other: BlockOffset): Int {
+    override fun compareTo(other: BlockAddress): Int {
         val compareTo = start.compareTo(other.start)
         if (compareTo != 0) {
             return compareTo

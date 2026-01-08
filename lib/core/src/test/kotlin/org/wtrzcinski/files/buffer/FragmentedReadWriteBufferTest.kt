@@ -32,7 +32,7 @@ class FragmentedReadWriteBufferTest {
     @Test
     fun `should flip buffer`() {
         val instants = (0..<1024 * 128).map { Instant.now() }
-        val tmpBuffer = ledger.allocateChannel(bodyAlignment = ByteSize(29))
+        val tmpBuffer = ledger.allocateChannel(maxBodySize = ByteSize(29))
         instants.forEach {
             tmpBuffer.writeInstant(it)
         }
@@ -40,7 +40,7 @@ class FragmentedReadWriteBufferTest {
 
         tmpBuffer.flip()
         val bodySize = tmpBuffer.remaining()
-        val directBuffer = ledger.allocateChannel(bodyAlignment = bodySize)
+        val directBuffer = ledger.allocateChannel(maxBodySize = bodySize)
         directBuffer.write(source = tmpBuffer)
         directBuffer.flip()
 

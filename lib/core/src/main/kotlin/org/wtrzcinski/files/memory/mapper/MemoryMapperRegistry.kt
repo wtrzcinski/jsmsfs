@@ -17,62 +17,97 @@
 package org.wtrzcinski.files.memory.mapper
 
 import org.wtrzcinski.files.memory.MemorySegmentLedger
+import org.wtrzcinski.files.memory.address.BlockAddress
 import org.wtrzcinski.files.memory.address.ByteSize
+import org.wtrzcinski.files.memory.lock.MemoryFileLock
 import org.wtrzcinski.files.memory.mode.Mode
-import org.wtrzcinski.files.memory.node.AttributesBlock
-import org.wtrzcinski.files.memory.schema.MapperSchema
+import org.wtrzcinski.files.memory.schema.StructSchema
+import org.wtrzcinski.files.memory.schema.ValueHandler.Companion.instantByteSize
+import org.wtrzcinski.files.memory.schema.ValueHandler.Companion.intByteSize
+import java.nio.file.attribute.PosixFilePermissions
 import java.time.Instant
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @OptIn(ExperimentalAtomicApi::class)
-class MemoryMapperRegistry(val memory: MemorySegmentLedger) {
+class MemoryMapperRegistry(val ledger: MemorySegmentLedger) {
 
-    companion object {
-        val intByteSize: ByteSize = ByteSize(value = Int.SIZE_BYTES.toLong())
-        val longByteSize: ByteSize = ByteSize(value = Long.SIZE_BYTES.toLong())
-        val instantByteSize: ByteSize = longByteSize + intByteSize
-    }
-
-    private val nodeSchema = MapperSchema.builder()
+    private val nodeSchema = StructSchema.builder()
         .field(name = "type", size = intByteSize)
-        .field(name = "data", size = memory.offsetBytes)
-        .field(name = "attrs", size = memory.offsetBytes)
-        .field(name = "name", size = memory.offsetBytes)
+        .field(name = "linkCount", size = intByteSize)
+        .field(name = "data", size = ledger.addressSchema.handler.byteSize)
+        .field(name = "attrs", size = ledger.addressSchema.handler.byteSize)
+        .field(name = "name", size = ledger.addressSchema.handler.byteSize)
         .build()
 
-    private val attrsSchema = MapperSchema.builder()
+    private val attrsSchema = StructSchema.builder()
         .field("lastAccessTime", size = instantByteSize)
         .field("lastModifiedTime", size = instantByteSize)
         .field("creationTime", size = instantByteSize)
         .field("permissions", size = intByteSize + ByteSize(9))
-        .field("owner", minSize = intByteSize, maxSize = intByteSize + ByteSize(100 * 2))
-        .field("group", minSize = intByteSize, maxSize = intByteSize + ByteSize(100 * 2))
+        .field("owner", minSize = intByteSize, maxSize = intByteSize + ByteSize(100 * 4))
+        .field("group", minSize = intByteSize, maxSize = intByteSize + ByteSize(100 * 4))
         .build()
 
     fun createString(name: String): StringMapper {
-        val nameMapper = StringMapper(memory = memory)
-        nameMapper.writeName(name)
+        val nameMapper = StringMapper(memory = ledger)
+        nameMapper.writeString(name)
         return nameMapper
     }
 
     fun createAttrs(): AttrsMapper {
-        val attrs = AttributesBlock(now = Instant.now())
-        val attrsMapper = AttrsMapper(memory = memory, mode = Mode.createRead(), schema = attrsSchema)
-        attrsMapper.writeLastAccessTime(attrs.lastAccessTime)
-        attrsMapper.writeLastModifiedTime(attrs.lastModifiedTime)
-        attrsMapper.writeCreationTime(attrs.creationTime)
-        attrsMapper.writePermissions(attrs.permissions)
-        attrsMapper.writeOwner(attrs.owner)
-        attrsMapper.writeGroup(attrs.group)
+        val now: Instant = Instant.ofEpochSecond(0, 0)
+        val schema = attrsSchema
+        val buffer = ledger.allocateChannel(maxBodySize = schema.maxBodySize())
+        val mode = Mode.create()
+        val attrsMapper = AttrsMapper(
+            mappers = this,
+            mode = mode,
+            schema = schema,
+            buffer = buffer
+        )
+        attrsMapper.writeLastAccessTime(now)
+        attrsMapper.writeLastModifiedTime(now)
+        attrsMapper.writeCreationTime(now)
+        attrsMapper.writePermissions(PosixFilePermissions.fromString("rwx".repeat(3)))
+        attrsMapper.writeOwner("")
+        attrsMapper.writeGroup("")
         return attrsMapper
     }
 
-    fun createFile(): NodeMapper {
-        val buffer = memory.allocateChannel(bodySize = nodeSchema.bodySize())
-        return NodeMapper(
-            mode = Mode.createRead(),
-            schema = nodeSchema,
+    fun readAttrs(ref: BlockAddress): AttrsMapper {
+        val mode = Mode.update()
+        val lock = MemoryFileLock.unlocked(mode)
+        val buffer = ledger.existingChannel(name = "", ref = ref, lock = lock)
+        return AttrsMapper(
+            mode = mode,
+            schema = attrsSchema,
+            mappers = this,
             buffer = buffer,
+            ref = ref,
+        )
+    }
+
+    fun createNode(): NodeMapper {
+        val mode = Mode.create()
+        val buffer = ledger.allocateChannel(exactBodySize = nodeSchema.bodySize())
+        return NodeMapper(
+            mode = mode,
+            schema = nodeSchema,
+            mappers = this,
+            buffer = buffer,
+        )
+    }
+
+    fun readNode(ref: BlockAddress): NodeMapper {
+        val mode = Mode.update()
+        val lock = MemoryFileLock.unlocked(mode)
+        val channel = ledger.existingChannel(name = "", ref = ref, lock = lock)
+        return NodeMapper(
+            mode = mode,
+            schema = nodeSchema,
+            mappers = this,
+            buffer = channel,
+            ref = ref,
         )
     }
 }

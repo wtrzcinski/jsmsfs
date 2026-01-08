@@ -22,28 +22,16 @@ data class Mode(
     val read: ReadMode = ReadMode.Block,
 ) {
     companion object {
-        fun readOnly(): Mode {
-            return of(existing = false, readOnly = true)
+        fun create(): Mode {
+            return Mode(OpenMode.Post, WriteMode.RequireNew, ReadMode.Block)
         }
 
-        fun createRead(): Mode {
-            return of(existing = false, readOnly = false)
+        fun update(): Mode {
+            return Mode(OpenMode.Put, WriteMode.RequireExisting, ReadMode.Block)
         }
 
-        fun updateRead(): Mode {
-            return of(existing = true, readOnly = false)
-        }
-
-        fun of(readOnly: Boolean, existing: Boolean = false): Mode {
-            return if (readOnly) {
-                Mode(OpenMode.ReadOnly, WriteMode.RequireExisting, ReadMode.Block)
-            } else {
-                if (existing) {
-                    Mode(OpenMode.ReadWrite, WriteMode.RequireExisting, ReadMode.Block)
-                } else {
-                    Mode(OpenMode.ReadWrite, WriteMode.RequireNew, ReadMode.Block)
-                }
-            }
+        fun read(): Mode {
+            return Mode(OpenMode.Get, WriteMode.RequireExisting, ReadMode.Block)
         }
     }
 }

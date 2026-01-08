@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,7 +48,7 @@ class RegularFileCreateTest {
         fileStore.ledger.bitmap.reserved
 
         assertThat(fileStore.used).isEqualTo(used)
-        assertThat(used).isEqualTo(ByteSize(102))
+        assertThat(used).isEqualTo(ByteSize(97))
     }
 
     @AfterEach
@@ -61,7 +61,7 @@ class RegularFileCreateTest {
         val fileStore = parent.fileSystem.fileStores.first() as MemoryFileStore
         val used = ByteSize(fileStore.totalSpace - fileStore.unallocatedSpace)
         assertThat(fileStore.used).isEqualTo(used)
-        assertThat(used).isEqualTo(ByteSize(102))
+        assertThat(used).isEqualTo(ByteSize(97))
     }
 
     @Test

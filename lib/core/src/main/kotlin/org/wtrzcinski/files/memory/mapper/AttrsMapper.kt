@@ -16,12 +16,12 @@
 
 package org.wtrzcinski.files.memory.mapper
 
-import org.wtrzcinski.files.memory.MemorySegmentLedger
-import org.wtrzcinski.files.memory.address.BlockOffset
+import org.wtrzcinski.files.memory.address.BlockAddress
 import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer
 import org.wtrzcinski.files.memory.mode.Mode
-import org.wtrzcinski.files.memory.mode.ModeState
-import org.wtrzcinski.files.memory.schema.MapperSchema
+import org.wtrzcinski.files.memory.mode.ModeMonitor
+import org.wtrzcinski.files.memory.mode.OpenMode
+import org.wtrzcinski.files.memory.schema.StructSchema
 import org.wtrzcinski.files.memory.util.Check
 import java.nio.file.attribute.PosixFilePermission
 import java.nio.file.attribute.PosixFilePermissions
@@ -29,70 +29,105 @@ import java.time.Instant
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 @ExperimentalAtomicApi
+@Suppress("unused")
 class AttrsMapper(
     mode: Mode,
-    private val memory: MemorySegmentLedger,
-    private val schema: MapperSchema,
-) : BlockBodyMapper, ModeState(mode) {
+    private val mappers: MemoryMapperRegistry,
+    private val schema: StructSchema,
+    private val buffer: MemoryReadWriteBuffer,
+    private var ref: BlockAddress? = null,
+) : BlockBodyMapper, ModeMonitor(mode) {
 
-    private val buffer: MemoryReadWriteBuffer = memory.allocateChannel(bodyAlignment = schema.bodyAlignment())
+    fun ref(): BlockAddress {
+        return checkNotNull(ref)
+    }
+
+    fun readLastAccessTime(): Instant {
+        throwIfNotReadable()
+        setPosition(schema.offsetRange("lastAccessTime"))
+
+        return buffer.readInstant()
+    }
 
     fun writeLastAccessTime(lastAccessTime: Instant) {
-        checkIsWritable()
+        throwIfNotWritable()
         checkPosition(schema.offsetRange("lastAccessTime"))
 
         buffer.writeInstant(lastAccessTime)
     }
 
+    fun readLastModifiedTime(): Instant {
+        throwIfNotReadable()
+        setPosition(schema.offsetRange("lastModifiedTime"))
+
+        return buffer.readInstant()
+    }
+
     fun writeLastModifiedTime(lastModifiedTime: Instant) {
-        checkIsWritable()
+        throwIfNotWritable()
         checkPosition(schema.offsetRange("lastModifiedTime"))
 
         buffer.writeInstant(lastModifiedTime)
     }
 
+    fun readCreationTime(): Instant {
+        throwIfNotReadable()
+        setPosition(schema.offsetRange("creationTime"))
+
+        return buffer.readInstant()
+    }
+
     fun writeCreationTime(creationTime: Instant) {
-        checkIsWritable()
+        throwIfNotWritable()
         checkPosition(schema.offsetRange("creationTime"))
 
         buffer.writeInstant(creationTime)
     }
 
     fun writePermissions(value: Set<PosixFilePermission>) {
-        checkIsWritable()
+        throwIfNotWritable()
         checkPosition(schema.offsetRange("permissions"))
 
         buffer.writeString(PosixFilePermissions.toString(value))
     }
 
+    fun readPermissions(): Set<PosixFilePermission> {
+        throwIfNotReadable()
+        setPosition(schema.offsetRange("permissions"))
+
+        val readString = buffer.readString()
+        return PosixFilePermissions.fromString(readString)
+    }
+
     fun writeOwner(owner: String) {
-        checkIsWritable()
+        throwIfNotWritable()
         checkPosition(schema.offsetRange("owner"))
 
         buffer.writeString(owner)
     }
 
     fun writeGroup(group: String) {
-        checkIsWritable()
+        throwIfNotWritable()
         checkPosition(schema.offsetRange("group"))
 
         buffer.writeString(group)
     }
 
-    override fun flip(): BlockOffset {
-        checkIsWritable()
+    override fun flip(mode: OpenMode): BlockAddress {
+        throwIfNotWritable()
         checkPosition(schema.offsetRange)
 
         if (tryFlip()) {
             try {
                 buffer.flip()
-                val bodySize = buffer.remaining()
-                val directBuffer = memory.allocateChannel(bodySize = bodySize)
+                val exactBodySize = buffer.remaining()
+                val directBuffer = mappers.ledger.allocateChannel(exactBodySize = exactBodySize)
                 directBuffer.use {
                     it.write(source = buffer)
                 }
 
-                return directBuffer.address()
+                this.ref = directBuffer.address()
+                return checkNotNull(this.ref)
             } finally {
                 buffer.close()
                 buffer.release()
@@ -102,8 +137,12 @@ class AttrsMapper(
         }
     }
 
-    private fun checkPosition(range: ClosedRange<BlockOffset>) {
-        Check.isTrue { BlockOffset(buffer.position()) in range }
+    private fun checkPosition(range: ClosedRange<BlockAddress>) {
+        Check.isTrue { BlockAddress(buffer.position()) in range }
     }
 
+    private fun setPosition(range: ClosedRange<BlockAddress>) {
+        require(range.start == range.endInclusive)
+        buffer.position(range.start.start)
+    }
 }

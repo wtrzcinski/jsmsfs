@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,11 +42,11 @@ data class MemoryFileOpenOptions(val options: Set<OpenOption>) {
     val mode: Mode
         get() {
             val openMode = if (readWrite) {
-                OpenMode.ReadWrite
+                OpenMode.Post
             } else if (read) {
-                OpenMode.ReadOnly
+                OpenMode.Put
             } else {
-                OpenMode.Close
+                OpenMode.Unlock
             }
             val writeMode = if (requireNew) {
                 WriteMode.RequireNew
@@ -81,10 +81,6 @@ data class MemoryFileOpenOptions(val options: Set<OpenOption>) {
 
     val readWrite: Boolean by lazy {
         options.contains(StandardOpenOption.WRITE)
-    }
-
-    val readOnly: Boolean by lazy {
-        (options.isEmpty() || options.contains(StandardOpenOption.READ)) && !options.contains(StandardOpenOption.WRITE)
     }
 
     val append: Boolean by lazy {

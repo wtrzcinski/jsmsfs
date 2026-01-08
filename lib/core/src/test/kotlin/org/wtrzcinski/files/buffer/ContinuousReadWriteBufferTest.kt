@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,12 +18,15 @@ package org.wtrzcinski.files.buffer
 
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.wtrzcinski.files.memory.address.BlockOffset
-import org.wtrzcinski.files.memory.buffer.IntContinuousReadWriteBuffer
-import org.wtrzcinski.files.memory.buffer.MemoryReadBuffer.Companion.MaxUnsignedIntInclusive
+import org.wtrzcinski.files.memory.address.BlockAddress
+import org.wtrzcinski.files.memory.buffer.ContinuousReadWriteBuffer
+import org.wtrzcinski.files.memory.schema.ValueHandler.Companion.MaxUnsignedIntInclusive
+import org.wtrzcinski.files.memory.schema.ValueSchema
+import org.wtrzcinski.files.memory.schema.handler.Int32AddressHandler
+import org.wtrzcinski.files.memory.schema.handler.Int32SizeSchemaHandler
 import java.lang.foreign.MemorySegment
 
-internal class IntReadWriteBufferTest {
+internal class ContinuousReadWriteBufferTest {
 
     @Test
     fun `max unsigned int should be valid`() {
@@ -33,8 +36,12 @@ internal class IntReadWriteBufferTest {
     @Test
     fun `should store ref as unsigned int`() {
         val givenMemorySegment = MemorySegment.ofArray(ByteArray(4))
-        val givenByteBuffer = IntContinuousReadWriteBuffer(givenMemorySegment)
-        val givenUnsignedInt = BlockOffset(Int.MAX_VALUE.toLong() * 2)
+        val givenByteBuffer = ContinuousReadWriteBuffer(
+            memorySegment = givenMemorySegment,
+            sizeSchema = ValueSchema(Int32SizeSchemaHandler()),
+            addressSchema = ValueSchema(Int32AddressHandler()),
+        )
+        val givenUnsignedInt = BlockAddress(Int.MAX_VALUE.toLong() * 2)
 
         givenByteBuffer.writeOffset(givenUnsignedInt)
 

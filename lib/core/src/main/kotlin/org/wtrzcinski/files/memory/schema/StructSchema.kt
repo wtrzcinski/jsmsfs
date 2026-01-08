@@ -16,13 +16,13 @@
 
 package org.wtrzcinski.files.memory.schema
 
-import org.wtrzcinski.files.memory.address.BlockOffset
+import org.wtrzcinski.files.memory.address.BlockAddress
 import org.wtrzcinski.files.memory.address.ByteSize
 import org.wtrzcinski.files.memory.address.DefaultBlockOffset
 
-class MapperSchema(
-    fields: List<MapperField>,
-) : ClosedRange<ByteSize> {
+class StructSchema(
+    fields: List<PropertySchema>,
+) : ClosedRange<ByteSize>, Schema {
 
     companion object {
 
@@ -34,18 +34,18 @@ class MapperSchema(
 
     class Builder {
 
-        val fields = mutableListOf<MapperField>()
+        val fields = mutableListOf<PropertySchema>()
 
         fun field(name: String, size: ByteSize) = apply {
-            fields.add(MapperField(name = name, size = size))
+            fields.add(PropertySchema(name = name, size = size))
         }
 
         fun field(name: String, minSize: ByteSize, maxSize: ByteSize) = apply {
-            this.fields.add(MapperField(name = name, range = minSize.rangeTo(maxSize)))
+            this.fields.add(PropertySchema(name = name, range = minSize.rangeTo(maxSize)))
         }
 
-        fun build(): MapperSchema {
-            return MapperSchema(this)
+        fun build(): StructSchema {
+            return StructSchema(this)
         }
 
     }
@@ -54,14 +54,14 @@ class MapperSchema(
 
     private val sizeRange: ClosedRange<ByteSize>
 
-    private val offsetRanges: Map<String, ClosedRange<BlockOffset>>
+    private val offsetRanges: Map<String, ClosedRange<BlockAddress>>
 
     init {
-        val offsetRanges1 = mutableMapOf<String, ClosedRange<BlockOffset>>()
+        val offsetRanges1 = mutableMapOf<String, ClosedRange<BlockAddress>>()
         var start = ByteSize.EmptySize
         var endInclusive = ByteSize.EmptySize
         for (field in fields) {
-            offsetRanges1[field.name] = BlockOffset(start.size)..BlockOffset(endInclusive.size)
+            offsetRanges1[field.name] = BlockAddress(start.size)..BlockAddress(endInclusive.size)
             start += field.start
             endInclusive += field.endInclusive
         }
@@ -73,11 +73,11 @@ class MapperSchema(
 
     override val endInclusive: ByteSize get() = sizeRange.endInclusive
 
-    val offsetRange: ClosedRange<BlockOffset> get() {
+    val offsetRange: ClosedRange<BlockAddress> get() {
         return DefaultBlockOffset(start.size)..DefaultBlockOffset(endInclusive.size)
     }
 
-    fun bodyAlignment(): ByteSize {
+    fun maxBodySize(): ByteSize {
         return sizeRange.endInclusive
     }
 
@@ -87,8 +87,9 @@ class MapperSchema(
         return sizeRange.endInclusive
     }
 
-    fun offsetRange(name: String): ClosedRange<BlockOffset> {
-        return checkNotNull(offsetRanges[name])
+    fun offsetRange(name: String): ClosedRange<BlockAddress> {
+        val offset = offsetRanges[name]
+        return checkNotNull(offset)
     }
 
 }

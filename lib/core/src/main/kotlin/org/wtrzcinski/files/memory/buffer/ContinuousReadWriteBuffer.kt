@@ -16,52 +16,92 @@
 
 package org.wtrzcinski.files.memory.buffer
 
-import org.wtrzcinski.files.memory.address.BlockOffset
+import org.wtrzcinski.files.memory.address.BlockAddress
 import org.wtrzcinski.files.memory.address.ByteSize
 import org.wtrzcinski.files.memory.mapper.BlockBodyMapper
-import org.wtrzcinski.files.memory.mode.ModeState
+import org.wtrzcinski.files.memory.mode.ModeMonitor
+import org.wtrzcinski.files.memory.mode.OpenMode
+import org.wtrzcinski.files.memory.schema.ValueSchema
 import org.wtrzcinski.files.memory.util.Check
 import java.lang.foreign.MemorySegment
 import java.nio.ByteBuffer
 import java.nio.charset.Charset
 
 @Suppress("UsePropertyAccessSyntax", "unused")
-abstract class ContinuousReadWriteBuffer(
+class ContinuousReadWriteBuffer(
     val memorySegment: MemorySegment,
-    val address: BlockOffset,
-    val byteBuffer: ByteBuffer,
+    val sizeSchema: ValueSchema<ByteSize>,
+    val addressSchema: ValueSchema<BlockAddress?>,
+    val address: BlockAddress = BlockAddress(memorySegment.address()),
+    val byteBuffer: ByteBuffer = memorySegment.asByteBuffer(),
     close: (MemoryReadWriteBuffer) -> Unit = {},
     release: (MemoryReadWriteBuffer) -> Unit = {},
 ) : MemoryReadWriteBuffer(close = close, release = release), BlockBodyMapper {
 
-    private val monitor = ModeState()
+    private val monitor = ModeMonitor()
+
+    override fun onClose(close: (MemoryReadWriteBuffer) -> Unit): MemoryReadWriteBuffer {
+        return ContinuousReadWriteBuffer(
+            memorySegment = memorySegment,
+            address = address,
+            byteBuffer = byteBuffer,
+            sizeSchema = sizeSchema,
+            addressSchema = addressSchema,
+            close = close,
+            release = release,
+        )
+    }
+
+    override val offsetBytes: ByteSize
+        get() = addressSchema.handler.byteSize
+
+    override fun readOffset(): BlockAddress? {
+        return addressSchema.handler.read(this)
+    }
+
+    override fun writeOffset(value: BlockAddress): MemoryReadWriteBuffer {
+        addressSchema.handler.write(this, value)
+        return this
+    }
+
+    override val sizeBytes: ByteSize
+        get() = sizeSchema.handler.byteSize
+
+    override fun readSize(): ByteSize {
+        return sizeSchema.handler.read(this)
+    }
+
+    override fun writeSize(value: ByteSize): MemoryReadWriteBuffer {
+        sizeSchema.handler.write(this, value)
+        return this
+    }
 
     override fun count(): Int {
         return 1
     }
 
-    override fun address(): BlockOffset {
-        monitor.checkNotReleased()
+    override fun address(): BlockAddress {
+        monitor.throwIfDeleting()
 
         return address
     }
 
     override fun truncate(): MemoryReadWriteBuffer {
-        monitor.checkIsWritable()
+        monitor.throwIfNotWritable()
 
         byteBuffer.limit(byteBuffer.position())
         return this
     }
 
     override fun append(): MemoryReadWriteBuffer {
-        monitor.checkIsWritable()
+        monitor.throwIfNotWritable()
 
         skipRemaining()
         return this
     }
 
     override fun release() {
-        monitor.checkIsClosed()
+        monitor.throwIfNotClosed()
 
         if (monitor.tryRelease()) {
             super.release()
@@ -85,7 +125,7 @@ abstract class ContinuousReadWriteBuffer(
     /**
      * @see java.nio.Buffer.flip
      */
-    override fun flip(): BlockOffset {
+    override fun flip(mode: OpenMode): BlockAddress {
         if (monitor.tryFlip()) {
             check(byteBuffer.position() > 0)
 
@@ -155,12 +195,15 @@ abstract class ContinuousReadWriteBuffer(
         return ByteSize(value = byteBuffer.remaining())
     }
 
-
     /**
      * @see ByteBuffer.getInt
      */
     override fun readInt(): Int {
         return byteBuffer.getInt()
+    }
+
+    override fun readShort(): Short {
+        return byteBuffer.getShort()
     }
 
     /**
@@ -234,6 +277,13 @@ abstract class ContinuousReadWriteBuffer(
     }
 
     /**
+     * @see ByteBuffer.putLong
+     */
+    override fun writeLong(value: Long) {
+        byteBuffer.putLong(value)
+    }
+
+    /**
      * @see ByteBuffer.putInt
      */
     override fun writeInt(value: Int) {
@@ -241,10 +291,17 @@ abstract class ContinuousReadWriteBuffer(
     }
 
     /**
-     * @see ByteBuffer.putLong
+     * @see ByteBuffer.putShort
      */
-    override fun writeLong(value: Long) {
-        byteBuffer.putLong(value)
+    override fun writeShort(value: Short) {
+        byteBuffer.putShort(value)
+    }
+
+    /**
+     * @see ByteBuffer.put
+     */
+    override fun writeByte(value: Byte) {
+        byteBuffer.put(value)
     }
 
     /**
@@ -266,7 +323,7 @@ abstract class ContinuousReadWriteBuffer(
     /**
      * @see ByteBuffer.put
      */
-    override fun write(src: ByteBuffer, length: ByteSize) {
+    override fun write(src: ByteBuffer, length: ByteSize): Int {
         val currentPosition = this.byteBuffer.position()
         val otherPosition = src.position()
 
@@ -274,5 +331,6 @@ abstract class ContinuousReadWriteBuffer(
 
         this.byteBuffer.position(currentPosition + length.toInt())
         src.position(otherPosition + length.toInt())
+        return length.toInt()
     }
 }

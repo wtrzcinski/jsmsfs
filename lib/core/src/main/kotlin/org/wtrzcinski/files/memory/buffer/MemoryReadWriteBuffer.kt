@@ -16,9 +16,10 @@
 
 package org.wtrzcinski.files.memory.buffer
 
-import org.wtrzcinski.files.memory.address.BlockOffset
+import org.wtrzcinski.files.memory.address.BlockAddress
 import org.wtrzcinski.files.memory.address.ByteSize
-import org.wtrzcinski.files.memory.mode.ModeState
+import org.wtrzcinski.files.memory.mode.ModeMonitor
+import org.wtrzcinski.files.memory.mode.OpenMode
 import java.nio.ByteBuffer
 import java.nio.channels.SeekableByteChannel
 
@@ -27,11 +28,15 @@ sealed class MemoryReadWriteBuffer(
     val release: (MemoryReadWriteBuffer) -> Unit = {},
 ) : MemoryReadBuffer, MemoryWriteBuffer, SeekableByteChannel {
 
-    private val monitor = ModeState()
+    private val monitor = ModeMonitor()
 
     //    SeekableByteChannel
     override fun read(dst: ByteBuffer): Int {
         return read(dst, ByteSize(dst.remaining()))
+    }
+
+    override fun write(src: ByteBuffer): Int {
+        return write(src, ByteSize(src.remaining()))
     }
 
     override fun isOpen(): Boolean {
@@ -51,15 +56,15 @@ sealed class MemoryReadWriteBuffer(
     abstract override fun truncate(size: Long): MemoryReadWriteBuffer
 
     //    ByteBuffer
-    abstract fun address(): BlockOffset
+    abstract fun address(): BlockAddress
 
-    abstract fun flip(): BlockOffset
+    abstract fun flip(mode: OpenMode = OpenMode.Put): BlockAddress
 
     abstract fun remaining(): ByteSize
 
     abstract fun clear()
 
-    abstract override fun writeOffset(value: BlockOffset): MemoryReadWriteBuffer
+    abstract override fun writeOffset(value: BlockAddress): MemoryReadWriteBuffer
 
     abstract override fun writeSize(value: ByteSize): MemoryReadWriteBuffer
 
@@ -77,7 +82,7 @@ sealed class MemoryReadWriteBuffer(
     abstract fun onClose(close: (MemoryReadWriteBuffer) -> Unit = {}): MemoryReadWriteBuffer
 
     open fun release() {
-        monitor.checkIsClosed()
+        monitor.throwIfNotClosed()
 
         if (monitor.tryRelease()) {
             release.invoke(this)

@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,16 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.node
+package org.wtrzcinski.files.mode
 
-sealed interface NamedNode {
-    val name: String
+import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.Test
+import org.wtrzcinski.files.memory.mode.OpenMode
+
+class OpenModeTest {
+    @Test
+    fun `only get and put should be idempotent`() {
+        assertThat(OpenMode.entries.filter { it.idempotent }).isEqualTo(listOf(OpenMode.Put, OpenMode.Get))
+        assertThat(OpenMode.entries.filter { !it.idempotent }).isEqualTo(listOf(OpenMode.Post, OpenMode.Unlock, OpenMode.Delete))
+    }
 }

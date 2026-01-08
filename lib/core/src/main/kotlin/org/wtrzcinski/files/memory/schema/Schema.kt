@@ -16,13 +16,7 @@
 
 package org.wtrzcinski.files.memory.schema
 
-import org.wtrzcinski.files.memory.address.ByteSize
-
-class MapperField(
-    val name: String,
-    val range: ClosedRange<ByteSize>,
-) : ClosedRange<ByteSize> by range {
-
-    constructor(name: String, size: ByteSize) : this(name = name, range = size.rangeTo(size))
-
-}
+/**
+ * @see java.lang.foreign.MemoryLayout
+ */
+interface Schema

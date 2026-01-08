@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,19 @@
 
 package org.wtrzcinski.files.memory.lock
 
-import org.wtrzcinski.files.memory.provider.MemoryFileOpenOptions
+import org.wtrzcinski.files.memory.mode.Mode
 
+@Suppress("unused")
 data class MemoryFileLock(
-    val mode: MemoryFileOpenOptions,
-    private val lock: ReadWriteMemoryFileLock,
+    val mode: Mode,
+    private val lock: ReadWriteMemoryFileLock? = null,
 ) {
     companion object {
+
+        fun unlocked(mode: Mode): MemoryFileLock {
+            return MemoryFileLock(mode)
+        }
+
         inline fun <T> MemoryFileLock.use(block: () -> T): T {
             try {
                 acquire()
@@ -33,15 +39,15 @@ data class MemoryFileLock(
         }
     }
 
-    fun refCount(): Int {
-        return lock.refCount()
+    fun refCount(): Int? {
+        return lock?.refCount()
     }
 
     fun acquire() {
-        lock.acquire(mode)
+        lock?.acquire(mode)
     }
 
     fun release() {
-        lock.release(mode)
+        lock?.release(mode)
     }
 }

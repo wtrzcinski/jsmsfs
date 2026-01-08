@@ -16,9 +16,9 @@
 
 package org.wtrzcinski.files.memory.address
 
-class DefaultBlockOffset(override val start: Long) : BlockOffset {
+class DefaultBlockOffset(override val start: Long) : BlockAddress {
 
-    constructor(other: BlockOffset): this(other.start)
+    constructor(other: BlockAddress): this(other.start)
 
     override fun toString(): String {
         return "${javaClass.simpleName}(start=$start)"
@@ -28,7 +28,7 @@ class DefaultBlockOffset(override val start: Long) : BlockOffset {
         if (this === other) {
             return true
         }
-        if (other !is BlockOffset) {
+        if (other !is BlockAddress) {
             return false
         }
         return start == other.start

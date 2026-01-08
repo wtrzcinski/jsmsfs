@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,15 +17,16 @@
 package org.wtrzcinski.files.memory.provider
 
 import org.wtrzcinski.files.memory.MemorySegmentFileSystem
-import org.wtrzcinski.files.memory.node.AttributesBlock
-import org.wtrzcinski.files.memory.node.ValidNode
+import org.wtrzcinski.files.memory.mapper.NodeMapper
 import java.nio.ByteBuffer
 import java.nio.file.attribute.*
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
+@OptIn(ExperimentalAtomicApi::class)
 internal class MemoryFileAttributeView(
     val fileSystem: MemorySegmentFileSystem,
     val name: String,
-    val node: ValidNode,
+    val node: NodeMapper,
 ): PosixFileAttributeView, UserDefinedFileAttributeView {
 
     override fun name(): String {
@@ -33,16 +34,15 @@ internal class MemoryFileAttributeView(
     }
 
     override fun setTimes(lastModifiedTime: FileTime, lastAccessTime: FileTime, createTime: FileTime) {
-        fileSystem.updateFileTime(node.offset, attrs = AttributesBlock(
+        fileSystem.updateFileTime(
+            node = node,
             lastModifiedTime = lastModifiedTime.toInstant(),
-            lastAccessTime = lastAccessTime.toInstant(),
-            creationTime = createTime.toInstant()
-        )
+            lastAccessTime = lastAccessTime.toInstant()
         )
     }
 
     override fun setPermissions(permissions: Set<PosixFilePermission>) {
-        fileSystem.updatePermissions(node.offset, attrs = AttributesBlock(permissions = permissions))
+        fileSystem.updatePermissions(node, permissions = permissions)
     }
 
     override fun readAttributes(): PosixFileAttributes {
@@ -50,7 +50,7 @@ internal class MemoryFileAttributeView(
             fileSystem = fileSystem,
             name = name,
             node = node,
-            attrs = fileSystem.findAttrs(node.offset),
+            attrs = node.readAttrs(),
         )
     }
 

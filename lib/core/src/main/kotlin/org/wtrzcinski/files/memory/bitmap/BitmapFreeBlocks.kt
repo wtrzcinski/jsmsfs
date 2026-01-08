@@ -21,6 +21,7 @@ import org.wtrzcinski.files.memory.address.ByteSize
 import org.wtrzcinski.files.memory.exception.OptimisticLockException
 import org.wtrzcinski.files.memory.exception.OutOfMemoryException
 import org.wtrzcinski.files.memory.util.Check
+import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.concurrent.atomics.AtomicLong
@@ -37,7 +38,7 @@ class BitmapFreeBlocks(
         fun find(free: BitmapFreeBlocks): Block
     }
 
-    private val byStartOffset: MutableMap<Long, BitmapEntry> = ConcurrentHashMap()
+    private val byStartOffset: TreeMap<Long, BitmapEntry> = TreeMap()
 
     private val byEndOffset: MutableMap<Long, BitmapEntry> = ConcurrentHashMap()
 
@@ -80,6 +81,12 @@ class BitmapFreeBlocks(
                 doAdd(BitmapEntry(current))
             }
         }
+        val entries = byStartOffset.entries.toList()
+        entries.forEachIndexed { index, entry ->
+            if (index != 0) {
+                entries[index - 1]
+            }
+        }
     }
 
     private fun doAdd(other: BitmapEntry): BitmapFreeBlocks {
@@ -102,60 +109,73 @@ class BitmapFreeBlocks(
         this.freeSize -= other.size
     }
 
-    fun findBySize(minByteSize: ByteSize, maxByteSize: ByteSize, prev: BitmapEntry): BitmapEntry {
-        Check.isTrue { minByteSize <= maxByteSize }
+    fun find(
+        headerSize: ByteSize,
+        maxByteSize: ByteSize,
+        exactBlockSize: ByteSize? = null,
+        prev: BitmapEntry? = null,
+    ): BitmapEntry {
+        Check.isTrue { headerSize.isValid() }
+        Check.isTrue { maxByteSize.isValid() }
+        Check.isTrue { headerSize <= maxByteSize }
 
-        if (size < maxByteSize) {
-            throw OutOfMemoryException()
-        }
 
-        if (compact) {
-            val entry = byStartOffset[prev.endExclusive]
-            if (entry != null) {
-                if (entry.size >= minByteSize.size) {
-                    return entry
+        if (prev != null && prev.isValid()) {
+            val neighbourNext = byStartOffset[prev.endExclusive]
+            if (neighbourNext != null) {
+                if (compact) {
+                    return neighbourNext
+                } else {
+                    if (neighbourNext.size >= headerSize.size) {
+                        return neighbourNext
+                    }
+                }
+            }
+            val neighbourPrev = byStartOffset[prev.endExclusive]
+            if (neighbourPrev != null) {
+                if (neighbourPrev.size >= headerSize.size) {
+                    return neighbourPrev
                 }
             }
         }
 
-        run {
+        if (exactBlockSize != null) {
+            if (size < exactBlockSize) {
+                throw OutOfMemoryException()
+            }
+
+            val segments = bySize[exactBlockSize.size]
+            if (!segments.isNullOrEmpty()) {
+                return segments.last()
+            }
+
+            val sumExact = exactBlockSize.size + headerSize.size
+            for (entry in byStartOffset.entries) {
+                if (entry.value.size >= sumExact) {
+                    return entry.value
+                }
+            }
+        } else {
+            if (size < maxByteSize) {
+                throw OutOfMemoryException()
+            }
+
             val segments = bySize[maxByteSize.size]
             if (!segments.isNullOrEmpty()) {
                 return segments.last()
             }
-        }
 
-        run {
-            val sum = (maxByteSize + minByteSize).size
-            for (entry in bySize.entries) {
-                if (entry.key >= sum) {
-                    val segments = entry.value
-                    if (segments.isNotEmpty()) {
-                        return segments.last()
-                    }
+            val sumMax = maxByteSize.size + headerSize.size
+            for (entry in byStartOffset.entries) {
+                if (entry.value.size >= sumMax) {
+                    return entry.value
                 }
             }
-        }
 
-        run {
-            val sum = (minByteSize + minByteSize).size
-            for (entry in bySize.entries) {
-                if (entry.key >= sum) {
-                    val segments = entry.value
-                    if (segments.isNotEmpty()) {
-                        return segments.last()
-                    }
-                }
-            }
-        }
-
-        run {
-            for (entry in bySize.entries) {
-                if (entry.key >= minByteSize.size) {
-                    val segments = entry.value
-                    if (segments.isNotEmpty()) {
-                        return segments.last()
-                    }
+            val sumMin = headerSize.size + headerSize.size
+            for (entry in byStartOffset.entries) {
+                if (entry.value.size >= sumMin) {
+                    return entry.value
                 }
             }
         }

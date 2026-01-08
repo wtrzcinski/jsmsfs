@@ -17,37 +17,30 @@
 package org.wtrzcinski.files.memory.buffer
 
 import org.wtrzcinski.files.memory.address.Block
-import org.wtrzcinski.files.memory.address.BlockOffset
+import org.wtrzcinski.files.memory.address.BlockAddress
 import org.wtrzcinski.files.memory.address.ByteSize
 import org.wtrzcinski.files.memory.lock.MemoryFileLock
 import org.wtrzcinski.files.memory.mapper.MemoryBlockReadWriteMapper
-import org.wtrzcinski.files.memory.mode.Mode
 
 interface BufferAllocator {
 
-    fun existingBuffer(
-        offset: BlockOffset
-    ): MemoryBlockReadWriteMapper
+    fun existingBuffer(ref: BlockAddress): MemoryBlockReadWriteMapper
 
-    fun existingChannel(
-        offset: BlockOffset,
-        mode: Mode = Mode.readOnly(),
-        lock: MemoryFileLock? = null
-    ): MemoryReadWriteBuffer
+    fun existingChannel(name: String, ref: BlockAddress, lock: MemoryFileLock): MemoryReadWriteBuffer
 
-    fun allocateBuffer(
-        prev: Block,
-        bodyAlignment: ByteSize = ByteSize.InvalidSize,
-        bodySize: ByteSize = ByteSize.InvalidSize,
-    ): MemoryBlockReadWriteMapper
+    fun allocateBuffer(prev: Block): MemoryBlockReadWriteMapper
+
+    fun allocateBuffer(sizeRange: ClosedRange<ByteSize>): MemoryBlockReadWriteMapper
+
+    fun allocateBuffer(size: ByteSize): MemoryBlockReadWriteMapper
 
     fun allocateChannel(
         lock: MemoryFileLock? = null,
-        bodyAlignment: ByteSize = ByteSize.InvalidSize,
-        bodySize: ByteSize = ByteSize.InvalidSize,
+        maxBodySize: ByteSize? = null,
+        exactBodySize: ByteSize? = null,
     ): MemoryReadWriteBuffer
 
-    fun releaseAll(offset: BlockOffset)
+    fun releaseAll(ref: BlockAddress)
 
     fun releaseOne(block: Block)
 }

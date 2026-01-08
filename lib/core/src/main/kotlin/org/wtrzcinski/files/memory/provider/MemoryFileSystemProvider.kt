@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,13 +22,10 @@ import org.wtrzcinski.files.memory.address.ByteSize
 import org.wtrzcinski.files.memory.allocator.MemoryScopeType
 import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer
 import org.wtrzcinski.files.memory.exception.MemoryUnsupportedOperationException
-import org.wtrzcinski.files.memory.mode.ModeState
-import org.wtrzcinski.files.memory.node.DirectoryNode
-import org.wtrzcinski.files.memory.node.NodeType.Companion.Directory
-import org.wtrzcinski.files.memory.node.NodeType.Companion.SymbolicLink
-import org.wtrzcinski.files.memory.node.RegularFileNode
-import org.wtrzcinski.files.memory.node.SymbolicLinkNode
-import org.wtrzcinski.files.memory.path.AbstractFilePath
+import org.wtrzcinski.files.memory.mapper.NodeType
+import org.wtrzcinski.files.memory.mapper.NodeType.Companion.Directory
+import org.wtrzcinski.files.memory.mapper.NodeType.Companion.SymbolicLink
+import org.wtrzcinski.files.memory.mode.ModeMonitor
 import org.wtrzcinski.files.memory.path.HardFilePath
 import org.wtrzcinski.files.memory.provider.MemoryFileOpenOptions.Companion.REQUIRE_NEW
 import org.wtrzcinski.files.memory.util.Check
@@ -53,9 +50,10 @@ class MemoryFileSystemProvider(
 ) : FileSystemProvider(), AutoCloseable {
 
     companion object {
-        val Scope = "scope"
-        val Capacity = "capacity"
-        val MaxBlockSize = "maxBlockSize"
+        const val schemaName: String = "jsmsfs"
+        const val Scope = "scope"
+        const val Capacity = "capacity"
+        const val MaxBlockSize = "maxBlockSize"
 
         private val filesystems = ConcurrentHashMap<String, MemoryFileSystem>()
 
@@ -63,7 +61,7 @@ class MemoryFileSystemProvider(
         fun newFileSystem(uri: URI, env: Map<String, *>): MemoryFileSystem {
             synchronized(filesystems) {
                 val capacity: ByteSize = ByteSize.readSize(env[Capacity]) ?: throw IllegalArgumentException("Missing capacity parameter")
-                val blockSize: ByteSize = ByteSize.readSize(env[MaxBlockSize]?.toString()) ?: MemorySegmentContext.DefaultBlockSize
+                val blockSize: ByteSize = ByteSize.readSize(env[MaxBlockSize]?.toString()) ?: MemorySegmentContext.DefaultMaxBlockSize
                 val scope: MemoryScopeType = env[Scope]?.toString()?.uppercase()?.let { MemoryScopeType.valueOf(it) } ?: MemoryScopeType.DEFAULT
 
                 val rawQuery = uri.rawQuery ?: ""
@@ -75,7 +73,6 @@ class MemoryFileSystemProvider(
                 )
                 val fileSystem = MemorySegmentFileSystem(
                     context = context,
-                    name = rawQuery,
                 )
                 val javaFileSystem = MemoryFileSystem(
                     env = env,
@@ -96,7 +93,7 @@ class MemoryFileSystemProvider(
         }
     }
 
-    private val monitor = ModeState()
+    private val monitor = ModeMonitor()
 
     override fun close() {
         if (monitor.tryClose()) {
@@ -105,7 +102,7 @@ class MemoryFileSystemProvider(
     }
 
     override fun getScheme(): String {
-        return "jsmsfs"
+        return schemaName
     }
 
     override fun newFileSystem(uri: URI, env: Map<String, *>): MemoryFileSystem {
@@ -121,15 +118,16 @@ class MemoryFileSystemProvider(
         options: Set<OpenOption>,
         vararg attrs: FileAttribute<*>
     ): MemoryReadWriteBuffer {
-        require(child is AbstractFilePath)
+        require(child is MemoryFilePathAdapter)
         checkNotNull(fileSystem)
 
         val parent = child.parent?.toRealPath()
-        val parentNode = parent?.node
-        require(parentNode is DirectoryNode)
+        require(parent?.delegate is HardFilePath?)
+        val parentNode = parent?.delegate?.node
+        require(parentNode?.readType() == Directory)
 
         val mode = MemoryFileOpenOptions(options as Set<StandardOpenOption>)
-        return fileSystem.getOrCreateData(parent = parentNode, childName = child.name, mode = mode)
+        return fileSystem.getOrCreateData(parent = parentNode, childName = child.delegate.name, mode = mode)
     }
 
     override fun newFileChannel(path: Path, options: Set<OpenOption>, vararg attrs: FileAttribute<*>): FileChannel {
@@ -141,7 +139,7 @@ class MemoryFileSystemProvider(
     }
 
     override fun createDirectory(path: Path, vararg attrs: FileAttribute<*>) {
-        require(path is AbstractFilePath)
+        require(path is MemoryFilePathAdapter)
         checkNotNull(fileSystem)
 
         val parentPath = path.parent
@@ -149,8 +147,9 @@ class MemoryFileSystemProvider(
             createDirectory(parentPath, *attrs)
         }
 
-        val parentNode = parentPath?.toRealPath()?.node
-        require(parentNode is DirectoryNode?)
+        val delegate1 = parentPath?.toRealPath()?.delegate as HardFilePath?
+        val parentNode = delegate1?.node
+        require(parentNode == null || parentNode.readType() == Directory)
 
         if (!path.exists()) {
             Check.isNotNull { parentNode }
@@ -158,11 +157,15 @@ class MemoryFileSystemProvider(
             fileSystem.getOrCreateFile(
                 parent = parentNode,
                 childType = Directory,
-                childName = path.name,
+                childName = path.delegate.name,
                 mode = REQUIRE_NEW,
+                targetNode = null,
             )
 
-            Check.isTrue { path.toRealPath().node is DirectoryNode }
+            Check.isTrue {
+                val delegate = path.toRealPath().delegate as HardFilePath
+                delegate.node.readType() == Directory
+            }
         }
     }
 
@@ -171,8 +174,8 @@ class MemoryFileSystemProvider(
     }
 
     override fun createSymbolicLink(path: Path, target: Path, vararg attrs: FileAttribute<*>) {
-        require(path is AbstractFilePath)
-        require(target is AbstractFilePath)
+        require(path is MemoryFilePathAdapter)
+        require(target is MemoryFilePathAdapter)
         checkNotNull(fileSystem)
 
         val parentPath = path.parent
@@ -182,11 +185,13 @@ class MemoryFileSystemProvider(
 
         val target = target.toRealPath()
 
-        val parentNode = parentPath?.toRealPath()?.node
-        require(parentNode is DirectoryNode?)
+        val delegate1 = parentPath?.toRealPath()?.delegate as HardFilePath?
+        val parentNode = delegate1?.node
+        require(parentNode?.readType() == Directory)
 
-        val targetNode = target.node
-        require(targetNode is RegularFileNode || targetNode is DirectoryNode)
+        val delegate = target.delegate as HardFilePath
+        val targetNode = delegate.node
+        require(targetNode.readType() == NodeType.Regular || targetNode.readType() == Directory)
 
         if (!path.exists()) {
             Check.isNotNull { parentNode }
@@ -194,18 +199,20 @@ class MemoryFileSystemProvider(
             fileSystem.getOrCreateFile(
                 parent = parentNode,
                 childType = SymbolicLink,
-                childName = path.name,
-                targetNode = targetNode,
-                mode = REQUIRE_NEW
+                childName = path.delegate.name,
+                targetNode = target.toUri(),
+                mode = REQUIRE_NEW,
             )
 
-            Check.isTrue { path.toRealPath().node is SymbolicLinkNode }
+            Check.isTrue {
+                val node = path.toRealPath().delegate as HardFilePath
+                node.node.readType() == SymbolicLink }
         }
     }
 
     override fun move(source: Path, target: Path, vararg options: CopyOption) {
-        require(source is AbstractFilePath)
-        require(target is AbstractFilePath)
+        require(source is MemoryFilePathAdapter)
+        require(target is MemoryFilePathAdapter)
 
         copy(source, target, *options)
 
@@ -213,8 +220,8 @@ class MemoryFileSystemProvider(
     }
 
     override fun copy(source: Path?, target: Path?, vararg options: CopyOption) {
-        require(source is AbstractFilePath)
-        require(target is AbstractFilePath)
+        require(source is MemoryFilePathAdapter)
+        require(target is MemoryFilePathAdapter)
 
         val sourceByteBuffer = Files.newByteChannel(source, StandardOpenOption.READ)
         val targetByteBuffer = Files.newByteChannel(target, StandardOpenOption.WRITE, StandardOpenOption.CREATE)
@@ -227,23 +234,26 @@ class MemoryFileSystemProvider(
     }
 
     override fun delete(path: Path) {
-        require(path is AbstractFilePath)
+        require(path is MemoryFilePathAdapter)
         checkNotNull(fileSystem)
 
         val realPath = path.toRealPath()
         val parent = realPath.parent
         if (parent != null) {
-            this.fileSystem.delete(parent.node, realPath.node)
+            parent.delegate as HardFilePath
+            realPath.delegate as HardFilePath
+            this.fileSystem.delete(parent.delegate.node, realPath.delegate.node)
         }
     }
 
     override fun <A : BasicFileAttributes> readAttributes(path: Path, type: Class<A>, vararg options: LinkOption): A {
         if (PosixFileAttributes::class.java == type) {
-            require(path is AbstractFilePath)
+            require(path is MemoryFilePathAdapter)
             checkNotNull(fileSystem)
             val realPath = path.toRealPath()
-            val node = realPath.node
-            val attrs = fileSystem.findAttrs(realPath.nodeRef)
+            val delegate = realPath.delegate as HardFilePath
+            val node = delegate.node
+            val attrs = node.readAttrs()
             return type.cast(
                 MemoryFileAttributes(
                     fileSystem = fileSystem,
@@ -253,11 +263,12 @@ class MemoryFileSystemProvider(
                 )
             )
         } else if (BasicFileAttributes::class.java == type) {
-            require(path is AbstractFilePath)
+            require(path is MemoryFilePathAdapter)
             checkNotNull(fileSystem)
             val realPath = path.toRealPath()
-            val node = realPath.node
-            val attrs = fileSystem.findAttrs(realPath.nodeRef)
+            val delegate = realPath.delegate as HardFilePath
+            val node = delegate.node
+            val attrs = node.readAttrs()
             return type.cast(
                 MemoryFileAttributes(
                     fileSystem = fileSystem,
@@ -276,10 +287,11 @@ class MemoryFileSystemProvider(
         vararg options: LinkOption
     ): V {
         if (PosixFileAttributeView::class.java == type) {
-            require(path is AbstractFilePath)
+            require(path is MemoryFilePathAdapter)
             checkNotNull(fileSystem)
             val realPath = path.toRealPath()
-            val pathNode = realPath.node
+            val delegate = realPath.delegate as HardFilePath
+            val pathNode = delegate.node
 
             return type.cast(
                 MemoryFileAttributeView(
@@ -289,10 +301,11 @@ class MemoryFileSystemProvider(
                 )
             )
         } else if (BasicFileAttributeView::class.java == type) {
-            require(path is AbstractFilePath)
+            require(path is MemoryFilePathAdapter)
             checkNotNull(fileSystem)
             val realPath = path.toRealPath()
-            val pathNode = realPath.node
+            val delegate = realPath.delegate as HardFilePath
+            val pathNode = delegate.node
 
             return type.cast(
                 MemoryFileAttributeView(
@@ -306,7 +319,7 @@ class MemoryFileSystemProvider(
     }
 
     override fun checkAccess(path: Path, vararg modes: AccessMode) {
-        require(path is AbstractFilePath)
+        require(path is MemoryFilePathAdapter)
 
         if (!path.exists()) {
             throw NoSuchFileException(toString())
@@ -335,18 +348,21 @@ class MemoryFileSystemProvider(
     }
 
     override fun isSameFile(path1: Path, path2: Path): Boolean {
-        require(path1 is HardFilePath)
-        require(path2 is HardFilePath)
+        require(path1 is MemoryFilePathAdapter)
+        require(path2 is MemoryFilePathAdapter)
+        require(path1.delegate is HardFilePath)
+        require(path2.delegate is HardFilePath)
 
-        val path1Node = path1.node
-        val path2Node = path2.node
+        val path1Node = path1.delegate.node
+        val path2Node = path2.delegate.node
         return path1Node == path2Node
     }
 
     override fun newDirectoryStream(parent: Path, filter: DirectoryStream.Filter<in Path>): DirectoryStream<Path> {
-        require(parent is HardFilePath)
+        require(parent is MemoryFilePathAdapter)
+        require(parent.delegate is HardFilePath)
 
-        Check.isTrue { parent.node is DirectoryNode }
+        Check.isTrue { parent.delegate.node.readType() == Directory }
 
         return MemorySecureDirectoryStream(parent = parent, filter = filter)
     }
@@ -363,8 +379,8 @@ class MemoryFileSystemProvider(
     }
 
     override fun isHidden(path: Path): Boolean {
-        require(path is AbstractFilePath)
+        require(path is MemoryFilePathAdapter)
 
-        return path.isHidden()
+        return path.delegate.isHidden()
     }
 }

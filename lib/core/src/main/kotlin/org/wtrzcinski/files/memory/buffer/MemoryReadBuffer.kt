@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,13 @@
 
 package org.wtrzcinski.files.memory.buffer
 
-import org.wtrzcinski.files.memory.address.Block.Companion.InvalidRef
-import org.wtrzcinski.files.memory.address.BlockOffset
+import org.wtrzcinski.files.memory.address.BlockAddress
 import org.wtrzcinski.files.memory.address.ByteSize
+import org.wtrzcinski.files.memory.schema.ValueHandler.Companion.InvalidRef
+import org.wtrzcinski.files.memory.schema.ValueHandler.Companion.UnsignedIntRange
+import org.wtrzcinski.files.memory.schema.ValueHandler.Companion.UnsignedShortRange
 import org.wtrzcinski.files.memory.util.Check
+import java.net.URI
 import java.nio.ByteBuffer
 import java.nio.charset.Charset
 import java.time.Instant
@@ -27,13 +30,7 @@ import java.time.Instant
 @Suppress("unused")
 sealed interface MemoryReadBuffer {
 
-    companion object {
-        //        -1L is reserved for invalid references
-        val MaxUnsignedIntInclusive: Long = Integer.toUnsignedLong(-1) - 1L
-        val unsignedIntRange: LongRange = 0..MaxUnsignedIntInclusive
-    }
-
-    fun readOffset(): BlockOffset?
+    fun readOffset(): BlockAddress?
 
     fun readSize(): ByteSize
 
@@ -41,12 +38,24 @@ sealed interface MemoryReadBuffer {
 
     fun readInt(): Int
 
+    fun readShort(): Short
+
     fun read(dst: ByteBuffer, length: ByteSize): Int
 
     fun read(dst: ByteArray): Int {
-        val dst1 = ByteBuffer.wrap(dst)
-        return read(dst1, ByteSize(dst1.remaining()))
+        return read(ByteBuffer.wrap(dst), ByteSize(ByteBuffer.wrap(dst).remaining()))
     }
+
+    fun readUnsignedShort(): Long? {
+        val intValue = readShort()
+        if (intValue == InvalidRef.toShort()) {
+            return null
+        }
+        val value = java.lang.Short.toUnsignedLong(intValue)
+        Check.isTrue { value in UnsignedShortRange }
+        return value
+    }
+
 
     fun readUnsignedInt(): Long? {
         val intValue = readInt()
@@ -54,16 +63,16 @@ sealed interface MemoryReadBuffer {
             return null
         }
         val value = Integer.toUnsignedLong(intValue)
-        Check.isTrue { value in unsignedIntRange }
+        Check.isTrue { value in UnsignedIntRange }
         return value
     }
 
-    fun readRefs(): Sequence<BlockOffset> {
-        val existing = mutableListOf<BlockOffset>()
+    fun readRefs(): Sequence<BlockAddress> {
+        val existing = mutableListOf<BlockAddress>()
         val count = readInt()
         repeat(count) {
             val element = readOffset()
-            requireNotNull(element)
+            checkNotNull(element)
             existing.add(element)
         }
         return existing.asSequence()
@@ -73,6 +82,10 @@ sealed interface MemoryReadBuffer {
         val epochSecond = readLong()
         val nanoAdjustment = readInt()
         return Instant.ofEpochSecond(epochSecond, nanoAdjustment.toLong())
+    }
+
+    fun readUri(): URI {
+        return URI(readString())
     }
 
     fun readString(charset: Charset = Charsets.UTF_8): String {

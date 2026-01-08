@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,8 @@
 
 package org.wtrzcinski.files.memory.lock
 
-import org.wtrzcinski.files.memory.address.BlockOffset
+import org.wtrzcinski.files.memory.address.BlockAddress
+import org.wtrzcinski.files.memory.mode.Mode
 import org.wtrzcinski.files.memory.provider.MemoryFileOpenOptions
 import org.wtrzcinski.files.memory.util.Check
 import java.util.concurrent.ConcurrentHashMap
@@ -30,25 +31,25 @@ class MemoryLockRegistry : AutoCloseable {
     private val locks = ConcurrentHashMap<Long, ReadWriteMemoryFileLock>()
 
     val bitmapLock = MemoryFileLock(
-        mode = MemoryFileOpenOptions.WRITE_TRUNCATE,
-        lock = ReadWriteMemoryFileLock(locks = this, start = BlockOffset.InvalidOffset),
+        mode = Mode.update(),
+        lock = ReadWriteMemoryFileLock(locks = this, start = BlockAddress.InvalidOffset),
     )
 
-    fun newLock(offset: BlockOffset? = null, mode: MemoryFileOpenOptions): MemoryFileLock {
-        var localOffset = offset
+    fun newLock(ref: BlockAddress? = null, mode: MemoryFileOpenOptions): MemoryFileLock {
+        var localOffset = ref
         if (localOffset == null) {
-            localOffset = BlockOffset.InvalidOffset
+            localOffset = BlockAddress.InvalidOffset
         }
 
         val compute = locks.compute(localOffset.start) { _, value ->
-            val lock = value ?: ReadWriteMemoryFileLock(locks = this, start = BlockOffset(offset = localOffset.start))
+            val lock = value ?: ReadWriteMemoryFileLock(locks = this, start = BlockAddress(offset = localOffset.start))
             lock.refs.incrementAndFetch()
             return@compute lock
         }
-        return MemoryFileLock(mode, compute as ReadWriteMemoryFileLock)
+        return MemoryFileLock(mode.mode, compute as ReadWriteMemoryFileLock)
     }
 
-    fun releaseLock(offset: BlockOffset, mode: MemoryFileOpenOptions) {
+    fun releaseLock(offset: BlockAddress) {
         locks.compute(offset.start) { _, value ->
             val refs = value?.refs?.decrementAndFetch() ?: 0
             if (refs == 0) {

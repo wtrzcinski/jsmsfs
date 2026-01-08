@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,15 @@
 
 package org.wtrzcinski.files.memory.address
 
-data class ByteSizeShift(val bitCount: Int) {
+data class ByteSizeShift(
+    val name: String = "",
+    val bitCount: Int,
+) {
     companion object {
-        val noop = ByteSizeShift(0)
-        val kb = ByteSizeShift(10)
-        val mb = ByteSizeShift(20)
-        val gb = ByteSizeShift(30)
+        val noop = ByteSizeShift(bitCount = 0)
+        val kb = ByteSizeShift(bitCount = 10)
+        val mb = ByteSizeShift(bitCount = 20)
+        val gb = ByteSizeShift(bitCount = 30)
     }
 
     fun convert(value: Long): Long {

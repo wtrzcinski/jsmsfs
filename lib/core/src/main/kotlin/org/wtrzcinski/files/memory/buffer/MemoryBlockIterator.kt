@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,22 +14,21 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.mapper
+package org.wtrzcinski.files.memory.buffer
 
-import org.wtrzcinski.files.memory.address.BlockOffset
+import org.wtrzcinski.files.memory.address.BlockAddress
 import org.wtrzcinski.files.memory.address.ByteSize
 import org.wtrzcinski.files.memory.address.DefaultBlockOffset
-import org.wtrzcinski.files.memory.buffer.BufferAllocator
+import org.wtrzcinski.files.memory.mapper.MemoryBlockReadWriteMapper
 import org.wtrzcinski.files.memory.mode.Mode
-import org.wtrzcinski.files.memory.mode.ModeState
-import org.wtrzcinski.files.memory.mode.OpenMode.ReadOnly
-import org.wtrzcinski.files.memory.mode.OpenMode.ReadWrite
-import org.wtrzcinski.files.memory.util.Check
+import org.wtrzcinski.files.memory.mode.ModeMonitor
+import org.wtrzcinski.files.memory.mode.OpenMode
 import org.wtrzcinski.files.memory.util.Require
 import java.lang.AutoCloseable
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.concurrent.atomics.minusAssign
 import kotlin.concurrent.atomics.plusAssign
 
 @OptIn(ExperimentalAtomicApi::class)
@@ -39,10 +38,9 @@ class MemoryBlockIterator(
     val memory: BufferAllocator,
     mode: Mode,
     val first: MemoryBlockReadWriteMapper,
-    private val capacity: ByteSize = ByteSize.InvalidSize,
     val data: CopyOnWriteArrayList<MemoryBlockReadWriteMapper> = CopyOnWriteArrayList(),
     private val index: AtomicInt = AtomicInt(value = -1),
-) : AutoCloseable, ModeState(mode = mode) {
+) : AutoCloseable, ModeMonitor(mode = mode) {
 
     init {
         init()
@@ -56,7 +54,7 @@ class MemoryBlockIterator(
         return data[index]
     }
 
-    fun offset(): BlockOffset {
+    fun offset(): BlockAddress {
         return DefaultBlockOffset(first)
     }
 
@@ -73,17 +71,13 @@ class MemoryBlockIterator(
     }
 
     fun bodySize(): ByteSize {
-        checkIsReadable()
+        throwIfNotReadable()
         init()
         var size = ByteSize(0)
         var current: MemoryBlockReadWriteMapper? = data.first()
         while (current != null) {
             size += current.readBodySize()
             current = readNext(current)
-        }
-
-        if (capacity.isValid()) {
-            Check.isTrue { size <= capacity }
         }
 
         return size
@@ -96,7 +90,7 @@ class MemoryBlockIterator(
     }
 
     fun skipRemaining(): Long {
-        checkIsReadable()
+        throwIfNotReadable()
 
         var remaining = 0L
         while (hasNext()) {
@@ -110,7 +104,7 @@ class MemoryBlockIterator(
     }
 
     private fun skipNext(): Long {
-        checkIsReadable()
+        throwIfNotReadable()
 
         if (index.load() >= data.size) {
             return 0
@@ -130,8 +124,21 @@ class MemoryBlockIterator(
         }
     }
 
+    fun prev(): MemoryBlockReadWriteMapper? {
+        throwIfNotReadable()
+
+        if (index.load() > 0) {
+            index -= 1
+            return data[index.load()]
+        } else if (index.load() == 0) {
+            return null
+        }
+
+        Require.unsupported()
+    }
+
     fun next(): MemoryBlockReadWriteMapper? {
-        checkIsReadable()
+        throwIfNotReadable()
 
         if (index.load() == -1) {
             index += 1
@@ -144,20 +151,20 @@ class MemoryBlockIterator(
         val readNextOffset = readNextOffset(current)
         if (readNextOffset != null) {
             when (openMode) {
-                ReadWrite -> {
+                OpenMode.Post -> {
                     check(index.load() == data.size - 1)
 
                     val newBodySize = current.body.position()
                     current.writeBodySizeAndTruncate(ByteSize(newBodySize))
 
-                    val nextRef = memory.existingBuffer(offset = readNextOffset)
+                    val nextRef = memory.existingBuffer(ref = readNextOffset)
                     data.add(nextRef)
                     index += 1
                     return nextRef
                 }
-                ReadOnly -> {
+                OpenMode.Put, OpenMode.Get -> {
                     if (index.load() == data.size - 1) {
-                        val nextRef = memory.existingBuffer(offset = readNextOffset)
+                        val nextRef = memory.existingBuffer(ref = readNextOffset)
                         data.add(nextRef)
                         index += 1
                         return nextRef
@@ -173,7 +180,7 @@ class MemoryBlockIterator(
             }
         } else {
             when (openMode) {
-                ReadWrite -> {
+                OpenMode.Post -> {
                     check(index.load() == data.size - 1)
 
                     val newBodySize = current.body.position()
@@ -192,7 +199,7 @@ class MemoryBlockIterator(
                     }
                     return nextRef
                 }
-                ReadOnly -> {
+                OpenMode.Put, OpenMode.Get -> {
                     check(index.load() == data.size - 1)
 
                     index += 1
@@ -205,8 +212,8 @@ class MemoryBlockIterator(
         }
     }
 
-    private fun readNextOffset(current: MemoryBlockReadWriteMapper): BlockOffset? {
-        checkIsReadable()
+    private fun readNextOffset(current: MemoryBlockReadWriteMapper): BlockAddress? {
+        throwIfNotReadable()
 
         val offset = current.readNextOffset()
         if (offset != null && offset.isValid()) {
@@ -216,11 +223,11 @@ class MemoryBlockIterator(
     }
 
     private fun readNext(current: MemoryBlockReadWriteMapper): MemoryBlockReadWriteMapper? {
-        checkIsReadable()
+        throwIfNotReadable()
 
         val offset = current.readNextOffset()
         if (offset != null && offset.isValid()) {
-            return memory.existingBuffer(offset = offset)
+            return memory.existingBuffer(ref = offset)
         }
         return null
     }
@@ -233,7 +240,7 @@ class MemoryBlockIterator(
     }
 
     fun release() {
-        checkIsClosed()
+        throwIfNotClosed()
 
         if (tryRelease()) {
             for (mapper in data) {
@@ -245,18 +252,18 @@ class MemoryBlockIterator(
     }
 
     override fun close() {
-        val wasWritable = isWritable()
+        val wasCreate = isCreating()
         if (tryClose()) {
-            if (wasWritable) {
+            if (wasCreate) {
                 truncate()
             }
         }
     }
 
     fun flip() {
-        val wasWritable = isWritable()
+        val wasCreate = isCreating()
         if (tryFlip()) {
-            if (wasWritable) {
+            if (wasCreate) {
                 truncate()
             }
 
@@ -276,7 +283,7 @@ class MemoryBlockIterator(
         val newBodySize = current.body.position()
 
         current.writeBodySizeAndTruncate(ByteSize(newBodySize))
-        current.writeNextOffsetAndRelease(BlockOffset.InvalidOffset)
+        current.writeNextOffsetAndRelease(BlockAddress.InvalidOffset)
     }
 
     override fun toString(): String {

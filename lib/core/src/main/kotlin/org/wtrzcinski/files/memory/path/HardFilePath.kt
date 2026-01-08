@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,52 +16,45 @@
 
 package org.wtrzcinski.files.memory.path
 
-import org.wtrzcinski.files.memory.address.BlockOffset
-import org.wtrzcinski.files.memory.node.DirectoryNode
-import org.wtrzcinski.files.memory.node.ValidNode
-import org.wtrzcinski.files.memory.provider.MemoryFileSystem
-import java.nio.file.LinkOption
-import java.nio.file.Path
+import org.wtrzcinski.files.memory.MemorySegmentFileSystem
+import org.wtrzcinski.files.memory.address.BlockAddress
+import org.wtrzcinski.files.memory.mapper.NodeMapper
+import org.wtrzcinski.files.memory.mapper.NodeType
+import org.wtrzcinski.files.memory.util.Check
 
 class HardFilePath(
-    fs: MemoryFileSystem,
-    val nodeRef: BlockOffset,
-    private val parent: HardFilePath?,
-) : AbstractFilePath(fs) {
+    override val fileSystem: MemorySegmentFileSystem,
+    val ref: BlockAddress,
+    val node: NodeMapper,
+    override val parent: HardFilePath?,
+    override val type: NodeType = node.readType(),
+    override val name: String = node.readName()
+) : FilePath {
 
-    override val name: String
-        get() {
-            return node.name
-        }
-
-    val node: ValidNode
-        get() {
-            val actualFileSystem = fileSystem.provider().fileSystem
-            checkNotNull(actualFileSystem)
-            return actualFileSystem.read(ValidNode::class, nodeRef)
-        }
-
-    override fun getParent(): HardFilePath? {
-        return parent
+    init {
+        Check.isTrue { ref.isValid() }
     }
 
-    override fun exists(): Boolean {
-        return true
+    override fun toRealPath(): HardFilePath {
+        return this
+    }
+
+    override fun findNode(): NodeMapper? {
+        if (this == fileSystem.root) {
+            return fileSystem.read(ref)
+        }
+        return super.findNode()
     }
 
     override fun isDirectory(): Boolean {
-        return node is DirectoryNode
+        return node.readType() == NodeType.Directory
     }
 
     override fun isAbsolute(): Boolean {
         return true
     }
 
-    override fun toAbsolutePath(): Path {
-        return this
-    }
-
-    override fun toRealPath(vararg options: LinkOption): HardFilePath {
+    override fun toAbsolutePath(): FilePath {
         return this
     }
 
@@ -69,17 +62,15 @@ class HardFilePath(
         if (this === other) return true
         if (other !is HardFilePath) return false
 
-        if (node != other.node) return false
+        if (ref != other.ref) return false
         if (parent != other.parent) return false
-        if (name != other.name) return false
 
         return true
     }
 
     override fun hashCode(): Int {
-        var result = node.hashCode()
+        var result = ref.hashCode()
         result = 31 * result + (parent?.hashCode() ?: 0)
-        result = 31 * result + name.hashCode()
         return result
     }
 }

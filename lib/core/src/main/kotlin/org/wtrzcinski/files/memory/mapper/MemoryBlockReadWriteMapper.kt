@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 package org.wtrzcinski.files.memory.mapper
 
 import org.wtrzcinski.files.memory.address.Block
-import org.wtrzcinski.files.memory.address.BlockOffset
+import org.wtrzcinski.files.memory.address.BlockAddress
 import org.wtrzcinski.files.memory.address.ByteSize
 import org.wtrzcinski.files.memory.buffer.BufferAllocator
 import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer
@@ -26,7 +26,7 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 @OptIn(ExperimentalAtomicApi::class)
 class MemoryBlockReadWriteMapper(
     val memory: BufferAllocator,
-    private val offset: BlockOffset,
+    private val offset: BlockAddress,
     private val header: MemoryHeaderMapper,
     val body: MemoryReadWriteBuffer,
 ) : Block {
@@ -39,7 +39,7 @@ class MemoryBlockReadWriteMapper(
         return header.readBodySize
     }
 
-    fun readNextOffset(): BlockOffset? {
+    fun readNextOffset(): BlockAddress? {
         return header.readNextOffset
     }
 
@@ -59,14 +59,14 @@ class MemoryBlockReadWriteMapper(
         }
     }
 
-    fun writeNextOffsetAndRelease(newValue: BlockOffset) {
+    fun writeNextOffsetAndRelease(newValue: BlockAddress) {
         val byteBuffer = header.nextOffsetBuffer
         byteBuffer.clear()
         val prevValue = byteBuffer.readOffset()
         byteBuffer.clear()
         if (prevValue != newValue) {
             if (prevValue != null && prevValue.isValid()) {
-                memory.releaseAll(offset = prevValue)
+                memory.releaseAll(ref = prevValue)
             }
 
             byteBuffer.clear()

@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,26 +16,27 @@
 
 package org.wtrzcinski.files.memory.provider
 
-import org.wtrzcinski.files.memory.node.DirectoryNode
+import org.wtrzcinski.files.memory.mapper.NodeType
 import org.wtrzcinski.files.memory.path.HardFilePath
 import java.nio.file.DirectoryStream
 import java.nio.file.Path
 
 internal class MemoryDirectoryStream(
-    val path: HardFilePath,
+    val path: MemoryFilePathAdapter,
     val filter: DirectoryStream.Filter<in Path>,
 ) : DirectoryStream<Path> {
 
     override fun iterator(): MutableIterator<Path> {
-        val node = path.node
-        require(node is DirectoryNode)
+        val delegate = path.delegate as HardFilePath
+        val node = delegate.node
+        require(node.readType() == NodeType.Directory)
 
-        val provider1 = path.fileSystem.provider() as MemoryFileSystemProvider
+        val provider1 = path.fileSystem.provider()
         val actualFileSystem = provider1.fileSystem
         requireNotNull(actualFileSystem)
 
-        val children = actualFileSystem.findChildren(node)
-        val map = children.map { path.resolve(it.name) }
+        val children = node.findChildren()
+        val map = children.map { path.resolve(it.readName()) }
         val filter = map.filter { filter.accept(it) }
         val iterator = filter.iterator()
 

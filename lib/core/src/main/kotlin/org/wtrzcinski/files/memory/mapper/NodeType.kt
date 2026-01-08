@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,19 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.node
+package org.wtrzcinski.files.memory.mapper
 
-class NodeType(val ordinal: Int) {
+data class NodeType(val name: String, val ordinal: Int) {
     companion object {
-        val Regular = NodeType(0) // Bytes, Attrs, Name
-        val Directory = NodeType(1) // Children Refs, Attrs, Name
-        val SymbolicLink = NodeType(2) // Target Symbolic Name, Attrs, Name
-        val Refs = NodeType(3) // Refs
-        val String = NodeType(4) // 4 bytes for length + string bytes
-        val Bytes = NodeType(5)  // bytes, can be anything
+        val Unknown = NodeType("Unknown", -1)
+
+        val Regular = NodeType("Regular", 0) // Bytes, Attrs, Name
+        val Directory = NodeType("Directory", 1) // Children Refs, Attrs, Name
+        val SymbolicLink = NodeType("SymbolicLink", 2) // Target Symbolic Name, Attrs, Name
+
+        val Refs = NodeType("Refs", 3) // Refs
+        val String = NodeType("String", 4) // 4 bytes for length + string bytes
+        val Bytes = NodeType("Bytes", 5)  // bytes, can be anything
 
         val entries = listOf(Regular, Directory, SymbolicLink, Refs, String, Bytes)
     }

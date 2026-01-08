@@ -21,19 +21,19 @@ import org.wtrzcinski.files.memory.allocator.MemoryScopeType
 import org.wtrzcinski.files.memory.bitmap.BitmapRegistry
 import org.wtrzcinski.files.memory.lock.MemoryLockRegistry
 import org.wtrzcinski.files.memory.mapper.MemoryMapperRegistry
-import org.wtrzcinski.files.memory.mode.ModeState
+import org.wtrzcinski.files.memory.mode.ModeMonitor
 import java.lang.foreign.MemorySegment
 
 class MemorySegmentContext(
     capacity: ByteSize,
     scope: MemoryScopeType = MemoryScopeType.DEFAULT,
-    blockSize: ByteSize = DefaultBlockSize,
+    blockSize: ByteSize = DefaultMaxBlockSize,
     env: Map<String, Any?> = mapOf(),
     compact: Boolean = true,
-) : ModeState() {
+) : ModeMonitor() {
 
     companion object {
-        val DefaultBlockSize = ByteSize(1024 * 4)
+        val DefaultMaxBlockSize = ByteSize(1024 * 4)
     }
 
     private val memoryFactory = scope.createFactory(env)
@@ -44,6 +44,7 @@ class MemorySegmentContext(
 
     val ledger: MemorySegmentLedger = MemorySegmentLedger(
         memory = memorySegment,
+        maxBlockSize = blockSize,
         bitmap = BitmapRegistry(
             memoryOffset = 0L,
             memorySize = capacity,
@@ -51,7 +52,6 @@ class MemorySegmentContext(
             locks = locks,
             compact = compact,
         ),
-        maxBlockByteSize = blockSize,
     )
 
     val mappers: MemoryMapperRegistry = MemoryMapperRegistry(ledger)

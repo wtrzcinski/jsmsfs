@@ -19,16 +19,43 @@ package org.wtrzcinski.files.memory.mode
 import java.nio.file.OpenOption
 
 enum class OpenMode(
-    val writeable: Boolean  = false,
-    val readable: Boolean = false,
-    val open: Boolean = writeable || readable,
+    val create: Boolean  = false,
+    val update: Boolean  = false,
+    val read: Boolean = false,
+    val open: Boolean = create || update || read,
+    val safe : Boolean = open && !create && !update,
+    val idempotent: Boolean = open && !create,
 ) : OpenOption {
 
-    ReadWrite(writeable = true, readable = true),
+    Post(create = true, update = true, read = true) {
+        override fun next(): Sequence<OpenMode> {
+            return sequenceOf(Put)
+        }
+    },
 
-    ReadOnly(readable = true),
+    Put(update = true, read = true) {
+        override fun next(): Sequence<OpenMode> {
+            return sequenceOf(Get, Unlock)
+        }
+    },
 
-    Close,
+    Get(read = true) {
+        override fun next(): Sequence<OpenMode> {
+            return sequenceOf(Put, Unlock)
+        }
+    },
 
-    Release,
+    Unlock {
+        override fun next(): Sequence<OpenMode> {
+            return sequenceOf(Delete)
+        }
+    },
+
+    Delete {
+        override fun next(): Sequence<OpenMode> {
+            return sequenceOf()
+        }
+    };
+
+    abstract fun next(): Sequence<OpenMode>
 }

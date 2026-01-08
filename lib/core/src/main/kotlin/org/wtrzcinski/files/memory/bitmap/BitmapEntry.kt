@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import org.wtrzcinski.files.memory.address.DefaultBlock
 class BitmapEntry(
     start: Long,
     size: Long,
+    prev: Long? = null,
 ) : DefaultBlock(
     start = start,
     size = size,
@@ -57,6 +58,14 @@ class BitmapEntry(
         return BitmapEntry(
             start = join.start,
             size = join.size,
+        )
+    }
+
+    fun withPrev(prev: Long?): BitmapEntry {
+        return BitmapEntry(
+            start = this.start,
+            size = this.size,
+            prev = prev,
         )
     }
 

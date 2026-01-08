@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,10 @@
 
 package org.wtrzcinski.files.memory.buffer
 
-import org.wtrzcinski.files.memory.address.BlockOffset
+import org.wtrzcinski.files.memory.address.BlockAddress
 import org.wtrzcinski.files.memory.address.ByteSize
-import org.wtrzcinski.files.memory.buffer.MemoryReadBuffer.Companion.MaxUnsignedIntInclusive
 import org.wtrzcinski.files.memory.mapper.MemoryBlockReadWriteMapper
+import org.wtrzcinski.files.memory.schema.ValueHandler.Companion.MaxUnsignedIntInclusive
 import org.wtrzcinski.files.memory.util.Check
 import java.nio.ByteBuffer
 import java.nio.charset.Charset
@@ -27,7 +27,7 @@ import java.time.Instant
 
 sealed interface MemoryWriteBuffer {
 
-    fun writeOffset(value: BlockOffset): MemoryWriteBuffer
+    fun writeOffset(value: BlockAddress): MemoryWriteBuffer
 
     fun writeSize(value: ByteSize): MemoryWriteBuffer
 
@@ -35,9 +35,15 @@ sealed interface MemoryWriteBuffer {
 
     fun writeInt(value: Int)
 
-    fun write(src: ByteBuffer): Int
+    fun writeShort(value: Short)
 
-    fun write(src: ByteBuffer, length: ByteSize)
+    fun writeByte(value: Byte)
+
+    fun write(src: ByteBuffer, length: ByteSize): Int
+
+    fun write(src: ByteBuffer): Int {
+        return write(src, ByteSize(src.remaining()))
+    }
 
     fun write(value: ByteArray) {
         write(src = ByteBuffer.wrap(value))
@@ -51,7 +57,7 @@ sealed interface MemoryWriteBuffer {
 
             is FragmentedReadWriteBuffer -> {
                 var count = 0
-                for (mapper: MemoryBlockReadWriteMapper in source.data.data) {
+                for (mapper: MemoryBlockReadWriteMapper in source.iterator.data) {
                     count += write(source = mapper.body)
                 }
                 return count
@@ -65,7 +71,13 @@ sealed interface MemoryWriteBuffer {
         writeInt(value.toInt())
     }
 
-    fun writeOffsets(value: Sequence<BlockOffset>) {
+    fun writeUnsignedShort(value: Long) {
+        Check.isTrue { value >= 0 }
+        Check.isTrue { value <= MaxUnsignedIntInclusive }
+        writeShort(value.toShort())
+    }
+
+    fun writeOffsets(value: Sequence<BlockAddress>) {
         writeInt(value.count())
         for (ref in value) {
             writeOffset(ref)

@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,10 @@
 
 package org.wtrzcinski.files.memory.lock
 
-import org.wtrzcinski.files.memory.address.BlockOffset
+import org.wtrzcinski.files.memory.address.BlockAddress
 import org.wtrzcinski.files.memory.address.DefaultBlockOffset
-import org.wtrzcinski.files.memory.provider.MemoryFileOpenOptions
+import org.wtrzcinski.files.memory.mode.Mode
+import org.wtrzcinski.files.memory.mode.OpenMode
 import org.wtrzcinski.files.memory.util.Check
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.atomics.AtomicInt
@@ -27,7 +28,7 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 @OptIn(ExperimentalAtomicApi::class)
 data class ReadWriteMemoryFileLock(
     private val locks: MemoryLockRegistry,
-    private val start: BlockOffset,
+    private val start: BlockAddress,
     private val lock: ReentrantReadWriteLock = ReentrantReadWriteLock(true),
     var refs: AtomicInt = AtomicInt(0),
 ) {
@@ -40,8 +41,8 @@ data class ReadWriteMemoryFileLock(
         return refs.load()
     }
 
-    fun acquire(mode: MemoryFileOpenOptions): ReadWriteMemoryFileLock {
-        if (mode.readWrite) {
+    fun acquire(mode: Mode): ReadWriteMemoryFileLock {
+        if (mode.open == OpenMode.Post) {
             lock.writeLock().lockInterruptibly()
         } else {
             lock.readLock().lockInterruptibly()
@@ -49,13 +50,13 @@ data class ReadWriteMemoryFileLock(
         return this
     }
 
-    fun release(mode: MemoryFileOpenOptions) {
-        if (mode.readWrite) {
+    fun release(mode: Mode) {
+        if (mode.open == OpenMode.Post) {
             lock.writeLock().unlock()
         } else {
             lock.readLock().unlock()
         }
 
-        locks.releaseLock(offset = start, mode = mode)
+        locks.releaseLock(offset = start)
     }
 }

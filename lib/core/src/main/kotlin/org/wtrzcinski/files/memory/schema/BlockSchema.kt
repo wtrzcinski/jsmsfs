@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,18 +14,9 @@
  * limitations under the License.
  */
 
-package org.wtrzcinski.files.memory.node
+package org.wtrzcinski.files.memory.schema
 
-import java.nio.file.attribute.PosixFilePermission
-import java.nio.file.attribute.PosixFilePermissions
-import java.time.Instant
-
-class AttributesBlock(
-    val now: Instant = Instant.ofEpochSecond(0, 0),
-    val lastAccessTime: Instant = now,
-    val lastModifiedTime: Instant = now,
-    val creationTime: Instant = now,
-    val permissions: Set<PosixFilePermission> = PosixFilePermissions.fromString("rwx".repeat(3)),
-    val owner: String = "",
-    val group: String = "",
+class BlockSchema(
+    val header: HeaderSchema,
+    val body: StructSchema,
 )

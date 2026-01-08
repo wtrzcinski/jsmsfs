@@ -19,12 +19,9 @@ package org.wtrzcinski.files.memory.address
 import org.wtrzcinski.files.memory.bitmap.BitmapEntry
 import org.wtrzcinski.files.memory.exception.MemoryIllegalArgumentException
 
-interface Block : BlockOffset, BlockSize, OpenEndRange<Long> {
+interface Block : BlockAddress, BlockSize, OpenEndRange<Long> {
 
     companion object {
-        const val InvalidRef: Long = -1
-
-        val InvalidBlock = DefaultBlock(start = InvalidRef, size = InvalidRef)
 
         fun of(byteOffset: Long, byteSize: Long): DefaultBlock {
             return DefaultBlock(start = byteOffset, size = byteSize)
@@ -45,7 +42,7 @@ interface Block : BlockOffset, BlockSize, OpenEndRange<Long> {
         return size == 0L
     }
 
-    operator fun contains(other: BlockOffset): Boolean {
+    operator fun contains(other: BlockAddress): Boolean {
         return this.start <= other.start && other.start <= this.endExclusive
     }
 

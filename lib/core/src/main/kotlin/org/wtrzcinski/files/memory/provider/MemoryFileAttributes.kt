@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,40 +17,41 @@
 package org.wtrzcinski.files.memory.provider
 
 import org.wtrzcinski.files.memory.MemorySegmentFileSystem
-import org.wtrzcinski.files.memory.node.AttributesBlock
-import org.wtrzcinski.files.memory.node.NodeType
-import org.wtrzcinski.files.memory.node.ValidNode
+import org.wtrzcinski.files.memory.mapper.AttrsMapper
+import org.wtrzcinski.files.memory.mapper.NodeMapper
+import org.wtrzcinski.files.memory.mapper.NodeType
 import java.nio.file.attribute.*
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
-// todo wojtek make it lazy
+@OptIn(ExperimentalAtomicApi::class)
 internal class MemoryFileAttributes(
     val fileSystem: MemorySegmentFileSystem,
     val name: String,
-    val node: ValidNode,
-    val attrs: AttributesBlock,
+    val node: NodeMapper,
+    val attrs: AttrsMapper,
 ) : PosixFileAttributes {
     companion object {
-        val basic = "basic"
-        val posix = "posix"
-        val user = "user"
-        val owner = "owner"
-        val acl = "acl"
+        const val basic = "basic"
+        const val posix = "posix"
+        const val user = "user"
+        const val owner = "owner"
+        const val acl = "acl"
     }
 
     override fun fileKey(): Any {
-        return node.offset
+        return node.ref()
     }
 
     override fun isRegularFile(): Boolean {
-        return node.fileType == NodeType.Regular
+        return node.readType() == NodeType.Regular
     }
 
     override fun isDirectory(): Boolean {
-        return node.fileType == NodeType.Directory
+        return node.readType() == NodeType.Directory
     }
 
     override fun isSymbolicLink(): Boolean {
-        return node.fileType == NodeType.SymbolicLink
+        return node.readType() == NodeType.SymbolicLink
     }
 
     override fun isOther(): Boolean {
@@ -58,19 +59,19 @@ internal class MemoryFileAttributes(
     }
 
     override fun lastAccessTime(): FileTime {
-        return FileTime.from(attrs.lastAccessTime)
+        return FileTime.from(attrs.readLastAccessTime())
     }
 
     override fun lastModifiedTime(): FileTime {
-        return FileTime.from(attrs.lastModifiedTime)
+        return FileTime.from(attrs.readLastModifiedTime())
     }
 
     override fun creationTime(): FileTime {
-        return FileTime.from(attrs.creationTime)
+        return FileTime.from(attrs.readCreationTime())
     }
 
     override fun permissions(): Set<PosixFilePermission> {
-        return attrs.permissions
+        return attrs.readPermissions()
     }
 
     override fun owner(): UserPrincipal? {

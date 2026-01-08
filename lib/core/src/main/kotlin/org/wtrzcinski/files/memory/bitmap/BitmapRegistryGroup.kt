@@ -17,11 +17,12 @@
 package org.wtrzcinski.files.memory.bitmap
 
 import org.wtrzcinski.files.memory.address.Block
+import org.wtrzcinski.files.memory.address.BlockAddress
 import org.wtrzcinski.files.memory.address.ByteSize
 import org.wtrzcinski.files.memory.lock.MemoryFileLock.Companion.use
 import org.wtrzcinski.files.memory.lock.MemoryLockRegistry
 import org.wtrzcinski.files.memory.mode.Mode
-import org.wtrzcinski.files.memory.mode.ModeState
+import org.wtrzcinski.files.memory.mode.ModeMonitor
 import org.wtrzcinski.files.memory.util.Check
 import org.wtrzcinski.files.memory.util.Require
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -29,11 +30,11 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 @OptIn(ExperimentalAtomicApi::class)
 class BitmapRegistryGroup(
     offset: Long,
-    mode: Mode = Mode.createRead(),
+    mode: Mode = Mode.create(),
     override val totalByteSize: ByteSize,
     private val locks: MemoryLockRegistry,
     private val compact: Boolean,
-) : BitmapRegistry, Block, ModeState(mode = mode) {
+) : BitmapRegistry, Block, ModeMonitor(mode = mode) {
 
     override val free: BitmapFreeBlocks = BitmapFreeBlocks(compact)
 
@@ -47,30 +48,82 @@ class BitmapRegistryGroup(
         free.add(BitmapEntry(start = offset, size = totalByteSize.size))
     }
 
-    override fun allocate(name: String, minBlockSize: ByteSize, maxBlockSize: ByteSize, prev: BitmapEntry): BitmapEntry {
-        Check.isTrue { minBlockSize <= maxBlockSize }
-        Check.isTrue { isWritable() }
+    override fun isReadOnly(): Boolean {
+        return isSafe()
+    }
+
+    override fun isReserved(ref: BlockAddress): Boolean {
+        val entry = reserved.byStartOffset[ref.start]
+        return entry != null
+    }
+
+    override fun allocate(range: ClosedRange<ByteSize>, exactBlockSize: ByteSize, prev: BitmapEntry?): BitmapEntry {
+        Check.isTrue { isCreating() }
 
         val lock = locks.bitmapLock
         lock.use {
-            var result = free.findBySize(minByteSize = minBlockSize, maxByteSize = maxBlockSize, prev = prev)
+            var result = free.find(
+                headerSize = range.start,
+                maxByteSize = range.endInclusive,
+                exactBlockSize = exactBlockSize,
+                prev = prev
+            )
             free.remove(result)
 
-            if (result.size > maxBlockSize.size) {
-                val divide = result.div(maxBlockSize)
+            if (result.size > exactBlockSize.size) {
+                val divide = result.div(exactBlockSize)
                 free.add(divide.second)
                 result = divide.first
             }
 
-            if (compact) {
-                if (prev.isValid()) {
+            if (prev != null && prev.isValid()) {
+                if (compact) {
                     if (prev.endExclusive == result.start) {
                         reserved.remove(prev)
                         result = prev + result
                     }
                 }
             }
-            reserved.add(result)
+            reserved.add(result.withPrev(prev = prev?.start))
+
+            Check.isTrue {
+                val sum = this.reserved.size + this.free.size
+                totalByteSize == sum
+            }
+            Check.isTrue {
+                result.size == exactBlockSize.size
+            }
+            return result
+        }
+    }
+
+    override fun allocate(range: ClosedRange<ByteSize>, prev: BitmapEntry?): BitmapEntry {
+        Check.isTrue { isCreating() }
+
+        val lock = locks.bitmapLock
+        lock.use {
+            var result = free.find(
+                headerSize = range.start,
+                maxByteSize = range.endInclusive,
+                prev = prev
+            )
+            free.remove(result)
+
+            if (result.size > range.endInclusive.size) {
+                val divide = result.div(range.endInclusive)
+                free.add(divide.second)
+                result = divide.first
+            }
+
+            if (prev != null && prev.isValid()) {
+                if (compact) {
+                    if (prev.endExclusive == result.start) {
+                        reserved.remove(prev)
+                        result = prev + result
+                    }
+                }
+            }
+            reserved.add(result.withPrev(prev = prev?.start))
 
             Check.isTrue {
                 val sum = this.reserved.size + this.free.size
@@ -81,7 +134,7 @@ class BitmapRegistryGroup(
     }
 
     override fun release(block: Block) {
-        Check.isTrue { isWritable() }
+        Check.isTrue { isCreating() }
 
         val lock = locks.bitmapLock
         lock.use {

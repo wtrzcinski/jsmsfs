@@ -17,9 +17,8 @@
 package org.wtrzcinski.files.memory.provider
 
 import org.wtrzcinski.files.memory.MemorySegmentFileSystem
-import org.wtrzcinski.files.memory.mode.ModeState
+import org.wtrzcinski.files.memory.mode.ModeMonitor
 import org.wtrzcinski.files.memory.path.FilePath
-import org.wtrzcinski.files.memory.path.HardFilePath
 import org.wtrzcinski.files.memory.provider.MemoryFileAttributes.Companion.basic
 import org.wtrzcinski.files.memory.provider.MemoryFileAttributes.Companion.owner
 import org.wtrzcinski.files.memory.provider.MemoryFileAttributes.Companion.posix
@@ -47,7 +46,7 @@ data class MemoryFileSystem(
         const val REGEX_SYNTAX: String = "regex"
     }
 
-    private val monitor = ModeState()
+    private val monitor = ModeMonitor()
 
     val delegate: MemorySegmentFileSystem
         get() {
@@ -56,14 +55,10 @@ data class MemoryFileSystem(
             return fileSystem
         }
 
-    internal val root: HardFilePath = HardFilePath(
-        fs = this,
-        parent = null,
-        nodeRef = delegate.rootRef,
-    )
+    val root = MemoryFilePathAdapter(delegate.root, this)
 
     override fun toString(): String {
-        return "${javaClass.simpleName}(name=$name, env=$env, root=$root)"
+        return "${javaClass.simpleName}(name=$name, env=$env, root=${delegate.root})"
     }
 
     override fun provider(): MemoryFileSystemProvider {
@@ -71,7 +66,10 @@ data class MemoryFileSystem(
     }
 
     override fun getPath(path: String, vararg more: String): Path {
-        return FilePath.getPath(root, path, *more)
+        return MemoryFilePathAdapter(
+            delegate = FilePath.resolve(root.delegate, path, *more),
+            fileSystem = this,
+        )
     }
 
     override fun getRootDirectories(): Iterable<Path> {
@@ -95,7 +93,7 @@ data class MemoryFileSystem(
     }
 
     override fun isReadOnly(): Boolean {
-        return delegate.isReadOnly()
+        return delegate.isSafe()
     }
 
     override fun isOpen(): Boolean {
@@ -132,12 +130,11 @@ data class MemoryFileSystem(
         }
     }
 
-    //    todo test Files#setOwner(Path path, UserPrincipal owner)
     override fun getUserPrincipalLookupService(): UserPrincipalLookupService {
-        TODO("Not yet implemented")
+        return MemoryUserPrincipalLookupService()
     }
 
-    override fun newWatchService(): WatchService? {
-        TODO("Not yet implemented")
+    override fun newWatchService(): WatchService {
+        return MemoryWatchService()
     }
 }

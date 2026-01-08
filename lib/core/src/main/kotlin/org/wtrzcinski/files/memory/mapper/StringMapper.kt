@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Wojciech Trzciński
+ * Copyright 2026 Wojciech Trzciński
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,33 +17,40 @@
 package org.wtrzcinski.files.memory.mapper
 
 import org.wtrzcinski.files.memory.MemorySegmentLedger
-import org.wtrzcinski.files.memory.address.BlockOffset
+import org.wtrzcinski.files.memory.address.BlockAddress
 import org.wtrzcinski.files.memory.exception.MemoryIllegalStateException
-import org.wtrzcinski.files.memory.mapper.MemoryMapperRegistry.Companion.intByteSize
-import org.wtrzcinski.files.memory.mode.ModeState
+import org.wtrzcinski.files.memory.mode.ModeMonitor
+import org.wtrzcinski.files.memory.mode.OpenMode
+import org.wtrzcinski.files.memory.schema.ValueHandler.Companion.intByteSize
 
 class StringMapper(
     private val memory: MemorySegmentLedger,
-) : BlockBodyMapper, ModeState() {
+    private var address: BlockAddress? = null,
+) : BlockBodyMapper, ModeMonitor() {
 
-    private var name: String? = null
+    private var string: String? = null
 
-    fun writeName(name: String) {
-        this.name = name
+    fun address(): BlockAddress {
+        return checkNotNull(address)
     }
 
-    override fun flip(): BlockOffset {
+    fun writeString(name: String) {
+        this.string = name
+    }
+
+    override fun flip(mode: OpenMode): BlockAddress {
         if (tryFlip()) {
-            val localName = name
+            val localName = string
             if (localName == null) {
-                return BlockOffset.InvalidOffset
+                return BlockAddress.InvalidOffset
             } else {
-                val bodyAlignment = intByteSize + (localName.length * 4)
-                val newByteChannel = memory.allocateChannel(bodyAlignment = bodyAlignment)
+                val maxBodySize = intByteSize + (localName.length * 4)
+                val newByteChannel = memory.allocateChannel(maxBodySize = maxBodySize)
                 newByteChannel.use {
                     newByteChannel.writeString(localName)
                 }
-                return newByteChannel.address()
+                this.address = newByteChannel.address()
+                return checkNotNull(this.address)
             }
         } else {
             throw MemoryIllegalStateException()

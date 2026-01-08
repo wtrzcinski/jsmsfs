@@ -17,12 +17,13 @@
 package org.wtrzcinski.files.memory.mapper
 
 import org.wtrzcinski.files.memory.address.Block
-import org.wtrzcinski.files.memory.address.BlockOffset
+import org.wtrzcinski.files.memory.address.BlockAddress
 import org.wtrzcinski.files.memory.address.ByteSize
 import org.wtrzcinski.files.memory.buffer.MemoryReadWriteBuffer
+import org.wtrzcinski.files.memory.mode.OpenMode
 
 data class MemoryHeaderMapper(
-    val offset: BlockOffset,
+    val offset: BlockAddress,
     val bodySizeBuffer: MemoryReadWriteBuffer,
     val nextOffsetBuffer: MemoryReadWriteBuffer,
 ) : Mapper, Block {
@@ -44,7 +45,7 @@ data class MemoryHeaderMapper(
             return byteBuffer.readSize()
         }
 
-    val readNextOffset: BlockOffset?
+    val readNextOffset: BlockAddress?
         get() {
             val byteBuffer = nextOffsetBuffer
             byteBuffer.clear()
@@ -58,7 +59,7 @@ data class MemoryHeaderMapper(
     override fun close() {
     }
 
-    override fun flip(): BlockOffset {
+    override fun flip(mode: OpenMode): BlockAddress {
         return offset
     }
 }
