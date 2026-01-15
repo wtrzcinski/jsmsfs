@@ -16,7 +16,7 @@
 
 package org.wtrzcinski.files.arguments
 
-import org.wtrzcinski.files.memory.provider.MemoryFilePathAdapter.Companion.deleteRecursively
+import org.wtrzcinski.memory.provider.MemoryFilePathAdapter.Companion.deleteRecursively
 import java.nio.file.FileSystem
 import java.nio.file.Path
 

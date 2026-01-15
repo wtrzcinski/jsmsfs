@@ -27,8 +27,8 @@ import org.wtrzcinski.files.Fixtures.newAlphanumericString
 import org.wtrzcinski.files.Fixtures.newUniqueString
 import org.wtrzcinski.files.arguments.PathProvider
 import org.wtrzcinski.files.arguments.TestArgumentsProvider
-import org.wtrzcinski.files.memory.address.ByteSize
-import org.wtrzcinski.files.memory.provider.MemoryFileStore
+import org.wtrzcinski.memory.address.DefaultBlockSize
+import org.wtrzcinski.memory.provider.MemoryFileStore
 import java.nio.file.Files
 import java.nio.file.StandardOpenOption
 
@@ -43,12 +43,12 @@ class RegularFileCreateTest {
         val parent = pathProvider.getPath("/")
 
         val fileStore = parent.fileSystem.fileStores.first() as MemoryFileStore
-        val used = ByteSize(fileStore.totalSpace - fileStore.unallocatedSpace)
+        val used = DefaultBlockSize(fileStore.totalSpace - fileStore.unallocatedSpace)
 
         fileStore.ledger.bitmap.reserved
 
-        assertThat(fileStore.used).isEqualTo(used)
-        assertThat(used).isEqualTo(ByteSize(97))
+        assertThat(fileStore.used()).isEqualTo(used)
+        assertThat(used).isEqualTo(DefaultBlockSize(80))
     }
 
     @AfterEach
@@ -59,9 +59,9 @@ class RegularFileCreateTest {
             Files.delete(child)
         }
         val fileStore = parent.fileSystem.fileStores.first() as MemoryFileStore
-        val used = ByteSize(fileStore.totalSpace - fileStore.unallocatedSpace)
-        assertThat(fileStore.used).isEqualTo(used)
-        assertThat(used).isEqualTo(ByteSize(97))
+        val used = DefaultBlockSize(fileStore.totalSpace - fileStore.unallocatedSpace)
+        assertThat(fileStore.used()).isEqualTo(used)
+        assertThat(used).isEqualTo(DefaultBlockSize(80))
     }
 
     @Test

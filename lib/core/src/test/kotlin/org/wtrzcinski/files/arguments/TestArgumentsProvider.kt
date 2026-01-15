@@ -21,10 +21,10 @@ import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.ArgumentsProvider
 import org.junit.jupiter.params.support.ParameterDeclarations
 import org.wtrzcinski.files.Fixtures
-import org.wtrzcinski.files.memory.allocator.MemoryScopeType
-import org.wtrzcinski.files.memory.provider.MemoryFileSystemProvider.Companion.Capacity
-import org.wtrzcinski.files.memory.provider.MemoryFileSystemProvider.Companion.MaxBlockSize
-import org.wtrzcinski.files.memory.provider.MemoryFileSystemProvider.Companion.Scope
+import org.wtrzcinski.memory.allocator.MemoryScopeType
+import org.wtrzcinski.memory.provider.MemoryFileSystemProvider.Companion.Capacity
+import org.wtrzcinski.memory.provider.MemoryFileSystemProvider.Companion.MaxBlockSize
+import org.wtrzcinski.memory.provider.MemoryFileSystemProvider.Companion.Scope
 import java.net.URI
 import java.nio.file.FileSystems
 import java.nio.file.Files

@@ -18,23 +18,25 @@ package org.wtrzcinski.files.buffer
 
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.wtrzcinski.files.memory.MemorySegmentContext
-import org.wtrzcinski.files.memory.address.ByteSize
+import org.wtrzcinski.memory.MemorySegmentContext
+import org.wtrzcinski.memory.address.DefaultBlockSize
+import org.wtrzcinski.memory.mapper.handler.InstantHandler
 import java.time.Instant
 
 class FragmentedReadWriteBufferTest {
     companion object {
-        private val context = MemorySegmentContext(capacity = ByteSize.readSize("4mb"), compact = false)
+        private val context = MemorySegmentContext(capacity = DefaultBlockSize.readSize("4mb"), compact = false)
 
         val ledger = context.ledger
     }
 
     @Test
     fun `should flip buffer`() {
+        val instantHandler = InstantHandler()
         val instants = (0..<1024 * 128).map { Instant.now() }
-        val tmpBuffer = ledger.allocateChannel(maxBodySize = ByteSize(29))
+        val tmpBuffer = ledger.allocateChannel(maxBodySize = DefaultBlockSize(29))
         instants.forEach {
-            tmpBuffer.writeInstant(it)
+            instantHandler.write(tmpBuffer, it)
         }
         assertThat(tmpBuffer.count()).isEqualTo(386)
 
@@ -45,7 +47,7 @@ class FragmentedReadWriteBufferTest {
         directBuffer.flip()
 
         instants.forEach {
-            assertThat(directBuffer.readInstant()).isEqualTo(it)
+            assertThat(instantHandler.read(directBuffer)).isEqualTo(it)
         }
         tmpBuffer.close()
         directBuffer.close()

@@ -18,12 +18,12 @@ package org.wtrzcinski.files.buffer
 
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.wtrzcinski.files.memory.address.BlockAddress
-import org.wtrzcinski.files.memory.buffer.ContinuousReadWriteBuffer
-import org.wtrzcinski.files.memory.schema.ValueHandler.Companion.MaxUnsignedIntInclusive
-import org.wtrzcinski.files.memory.schema.ValueSchema
-import org.wtrzcinski.files.memory.schema.handler.Int32AddressHandler
-import org.wtrzcinski.files.memory.schema.handler.Int32SizeSchemaHandler
+import org.wtrzcinski.memory.address.BlockAddress
+import org.wtrzcinski.memory.buffer.ContinuousReadWriteBuffer
+import org.wtrzcinski.memory.mapper.handler.Int32AddressHandler
+import org.wtrzcinski.memory.mapper.handler.Int32SizeSchemaHandler
+import org.wtrzcinski.memory.mapper.handler.SimpleVarHandler.Companion.MaxUnsignedIntInclusive
+import org.wtrzcinski.memory.mapper.schema.SchemaRegistry
 import java.lang.foreign.MemorySegment
 
 internal class ContinuousReadWriteBufferTest {
@@ -38,15 +38,17 @@ internal class ContinuousReadWriteBufferTest {
         val givenMemorySegment = MemorySegment.ofArray(ByteArray(4))
         val givenByteBuffer = ContinuousReadWriteBuffer(
             memorySegment = givenMemorySegment,
-            sizeSchema = ValueSchema(Int32SizeSchemaHandler()),
-            addressSchema = ValueSchema(Int32AddressHandler()),
+            schemas = SchemaRegistry(
+                sizeHandler = Int32SizeSchemaHandler,
+                refHandler = Int32AddressHandler,
+            )
         )
         val givenUnsignedInt = BlockAddress(Int.MAX_VALUE.toLong() * 2)
 
-        givenByteBuffer.writeOffset(givenUnsignedInt)
+        givenByteBuffer.writeRef(givenUnsignedInt)
 
         givenByteBuffer.rewind()
-        val actual = givenByteBuffer.readOffset()
+        val actual = givenByteBuffer.readRef()
         assertThat(actual).isEqualTo(givenUnsignedInt)
     }
 }

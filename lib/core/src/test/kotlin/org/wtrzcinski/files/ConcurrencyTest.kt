@@ -29,9 +29,9 @@ import org.wtrzcinski.files.Fixtures.newRandomPath
 import org.wtrzcinski.files.Fixtures.newUniqueString
 import org.wtrzcinski.files.arguments.PathProvider
 import org.wtrzcinski.files.arguments.TestArgumentsProvider
-import org.wtrzcinski.files.memory.address.ByteSize
-import org.wtrzcinski.files.memory.provider.MemoryFileStore
-import org.wtrzcinski.files.memory.util.HistoricalLog
+import org.wtrzcinski.memory.address.DefaultBlockSize
+import org.wtrzcinski.memory.provider.MemoryFileStore
+import org.wtrzcinski.memory.util.HistoricalLog
 import java.nio.file.Files
 import java.nio.file.StandardOpenOption.APPEND
 import java.nio.file.StandardOpenOption.CREATE
@@ -59,9 +59,9 @@ class ConcurrencyTest {
         val parent = pathProvider.getPath("/")
 
         val fileStore = parent.fileSystem.fileStores.first() as MemoryFileStore
-        val used = ByteSize(fileStore.totalSpace - fileStore.unallocatedSpace)
-        assertThat(fileStore.used).isEqualTo(used)
-        assertThat(used).isEqualTo(ByteSize(97))
+        val used = DefaultBlockSize(fileStore.totalSpace - fileStore.unallocatedSpace)
+        assertThat(fileStore.used()).isEqualTo(used)
+        assertThat(used).isEqualTo(DefaultBlockSize(80))
     }
 
     @AfterEach
@@ -72,9 +72,9 @@ class ConcurrencyTest {
             Files.delete(child)
         }
         val fileStore = parent.fileSystem.fileStores.first() as MemoryFileStore
-        val used = ByteSize(fileStore.totalSpace - fileStore.unallocatedSpace)
-        assertThat(fileStore.used).isEqualTo(used)
-        assertThat(used).isEqualTo(ByteSize(97))
+        val used = DefaultBlockSize(fileStore.totalSpace - fileStore.unallocatedSpace)
+        assertThat(fileStore.used()).isEqualTo(used)
+        assertThat(used).isEqualTo(DefaultBlockSize(80))
     }
 
     @Test

@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import java.lang.foreign.*
 import java.lang.invoke.MethodHandle
+import java.math.BigInteger
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -55,6 +56,28 @@ class SandboxTest {
 
         Files.delete(file)
         Files.delete(link)
+    }
+
+    @Test
+    fun should3() {
+        val bigInteger = BigInteger(1, byteArrayOf(1, 2))
+
+        println(bigInteger.toLong())
+        println(bigInteger.toByteArray().contentToString())
+        println(bigInteger.bitLength())
+    }
+
+    @Test
+    fun should4() {
+        val r = 1
+        val w = 1 shl 1
+        val x = 1 shl 2
+
+        var perm: Int = 0
+        perm = perm or r
+        perm = perm or w
+        perm = perm or x
+        println(perm.toByte())
     }
 
 }

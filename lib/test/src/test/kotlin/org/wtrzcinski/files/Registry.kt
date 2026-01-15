@@ -17,10 +17,9 @@
 package org.wtrzcinski.files
 
 import org.assertj.core.api.Assertions
-import org.wtrzcinski.files.memory.mapper.NodeType
-import org.wtrzcinski.files.memory.provider.MemoryFilePathAdapter
-import org.wtrzcinski.files.memory.path.HardFilePath
-import org.wtrzcinski.files.memory.util.Require
+import org.wtrzcinski.memory.mapper.NodeType
+import org.wtrzcinski.memory.path.HardFilePath
+import org.wtrzcinski.memory.provider.MemoryFilePathAdapter
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 import java.nio.file.Path
@@ -42,6 +41,7 @@ class Registry {
         directories.add(root)
     }
 
+//    @Synchronized
     fun checkRandomFile() {
         val entry = regular.entries.randomOrNull()
         if (entry != null) {
@@ -50,6 +50,7 @@ class Registry {
         }
     }
 
+//    @Synchronized
     fun checkRandomLink() {
         val entry = links.entries.randomOrNull()
         if (entry != null) {
@@ -66,24 +67,13 @@ class Registry {
         }
     }
 
-    fun createRandom() {
-        val parent = directories.random()
-        val nextInt = Random.nextInt(from = 0, until = 4)
-        if (nextInt == 0) {
-            createRandomDirectory(parent = parent)
-        } else if (nextInt == 1) {
-            createRandomLink(parent = parent)
-        } else {
-            createRandomRegularFile(parent = parent)
-        }
-    }
-
+//    @Synchronized
     fun deleteRandom() {
         val randomParent: Path = directories.random()
         deleteRandom(randomParent)
     }
 
-    tailrec fun deleteRandom(directory: Path): Boolean {
+    private tailrec fun deleteRandom(directory: Path): Boolean {
         require(directory is MemoryFilePathAdapter)
         val delegate = directory.delegate
         if (delegate is HardFilePath) {
@@ -115,7 +105,20 @@ class Registry {
             }
         }
 
-        Require.unreachable()
+        TODO("Not yet implemented")
+    }
+
+//    @Synchronized
+    fun createRandom() {
+        val parent = directories.random()
+        val nextInt = Random.nextInt(from = 0, until = 4)
+        if (nextInt == 0) {
+            createRandomDirectory(parent = parent)
+        } else if (nextInt == 1) {
+            createRandomLink(parent = parent)
+        } else {
+            createRandomRegularFile(parent = parent)
+        }
     }
 
     private fun createRandomRegularFile(parent: Path) {

@@ -17,15 +17,15 @@
 package org.wtrzcinski.files.address
 
 import org.assertj.core.api.Assertions.assertThat
-import org.wtrzcinski.files.memory.address.ByteSizeShift
+import org.wtrzcinski.memory.address.DefaultBlockSizeShift
 import kotlin.test.Test
 
 class ByteSizeShiftTest {
     @Test
     fun `should convert`() {
-        assertThat(ByteSizeShift.noop.convert(value = 42L)).isEqualTo(42)
-        assertThat(ByteSizeShift.kb.convert(value = 42L)).isEqualTo(42 * 1024L)
-        assertThat(ByteSizeShift.mb.convert(value = 42L)).isEqualTo(42 * 1024L * 1024L)
-        assertThat(ByteSizeShift.gb.convert(value = 42L)).isEqualTo(42 * 1024L * 1024L * 1024L)
+        assertThat(DefaultBlockSizeShift.noop.convert(value = 42L)).isEqualTo(42)
+        assertThat(DefaultBlockSizeShift.kb.convert(value = 42L)).isEqualTo(42 * 1024L)
+        assertThat(DefaultBlockSizeShift.mb.convert(value = 42L)).isEqualTo(42 * 1024L * 1024L)
+        assertThat(DefaultBlockSizeShift.gb.convert(value = 42L)).isEqualTo(42 * 1024L * 1024L * 1024L)
     }
 }

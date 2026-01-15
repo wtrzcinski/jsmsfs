@@ -32,6 +32,11 @@ dependencies {
     api("org.jetbrains.kotlin:kotlin-reflect")
     api(libs.slf4j.api)
 
+    implementation("org.apache.arrow:arrow-vector:18.3.0")
+    implementation("org.apache.arrow:arrow-dataset:18.3.0")
+    implementation("org.apache.arrow:arrow-memory-netty:18.3.0")
+    implementation("com.google.flatbuffers:flatbuffers-java:25.2.10")
+
     testImplementation(libs.slf4j.simple)
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")

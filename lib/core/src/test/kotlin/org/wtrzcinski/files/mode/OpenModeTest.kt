@@ -18,7 +18,7 @@ package org.wtrzcinski.files.mode
 
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.wtrzcinski.files.memory.mode.OpenMode
+import org.wtrzcinski.memory.mode.OpenMode
 
 class OpenModeTest {
     @Test

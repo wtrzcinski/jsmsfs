@@ -24,7 +24,7 @@ import org.junit.jupiter.params.provider.ArgumentsSource
 import org.wtrzcinski.files.Fixtures.newUniqueString
 import org.wtrzcinski.files.arguments.PathProvider
 import org.wtrzcinski.files.arguments.TestArgumentsProvider
-import org.wtrzcinski.files.memory.provider.MemoryFileStore
+import org.wtrzcinski.memory.provider.MemoryFileStore
 import java.nio.file.Files
 
 @ParameterizedClass
@@ -53,7 +53,7 @@ class RegularFileDeleteTest {
         val givenFile2 = givenRoot.resolve("file2-file2-file2")
         val givenFile3 = givenRoot.resolve("file3-file3-file3")
 
-        val reservedSizeAfterFirstFile = givenFileStore.used
+        val reservedSizeAfterFirstFile = givenFileStore.used()
         Files.createFile(givenFile1)
         Files.createFile(givenFile2)
 
@@ -84,6 +84,6 @@ class RegularFileDeleteTest {
         assertThat(Files.exists(givenFile2)).isFalse()
         assertThat(Files.exists(givenFile3)).isFalse()
 
-        assertThat(givenFileStore.used).isEqualTo(reservedSizeAfterFirstFile)
+        assertThat(givenFileStore.used()).isEqualTo(reservedSizeAfterFirstFile)
     }
 }

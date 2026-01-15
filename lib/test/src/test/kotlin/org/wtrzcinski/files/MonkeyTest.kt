@@ -22,15 +22,18 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.slf4j.LoggerFactory
-import org.wtrzcinski.files.memory.address.ByteSize
-import org.wtrzcinski.files.memory.allocator.MemoryScopeType.GLOBAL
-import org.wtrzcinski.files.memory.provider.MemoryFilePathAdapter.Companion.deleteRecursively
-import org.wtrzcinski.files.memory.provider.MemoryFileStore
-import org.wtrzcinski.files.memory.provider.MemoryFileSystemProvider
-import org.wtrzcinski.files.memory.provider.MemoryFileSystemProvider.Companion.Capacity
-import org.wtrzcinski.files.memory.provider.MemoryFileSystemProvider.Companion.Scope
+import org.wtrzcinski.memory.address.DefaultBlockSize
+import org.wtrzcinski.memory.allocator.MemoryScopeType.GLOBAL
+import org.wtrzcinski.memory.provider.MemoryFilePathAdapter.Companion.deleteRecursively
+import org.wtrzcinski.memory.provider.MemoryFileStore
+import org.wtrzcinski.memory.provider.MemoryFileSystemProvider
+import org.wtrzcinski.memory.provider.MemoryFileSystemProvider.Companion.Capacity
+import org.wtrzcinski.memory.provider.MemoryFileSystemProvider.Companion.Scope
 import java.net.URI
 import java.nio.file.Path
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 
 @Suppress("MayBeConstant")
@@ -40,10 +43,9 @@ internal class MonkeyTest {
 
         private val log = LoggerFactory.getLogger(MonkeyTest::class.java)
 
-        val capacity: String = "4MB"
         val minStringSize: Int = 256
         val maxStringSize: Int = 512
-        val repeats: Int = 2000 * 60
+        val repeats: Int = 3000 * 60
 
         private val registry = Registry()
 
@@ -52,8 +54,7 @@ internal class MonkeyTest {
                 uri = URI.create("jsmsfs:///"),
                 env = mapOf(
                     Scope to GLOBAL,
-                    Capacity to capacity,
-//                    MaxBlockSize to 128,
+                    Capacity to "4MB",
                 ),
             )
             val root = Path.of(URI.create("jsmsfs:///"))
@@ -66,9 +67,9 @@ internal class MonkeyTest {
         val parent = Path.of(URI.create("jsmsfs:///"))
 
         val fileStore = parent.fileSystem.fileStores.first() as MemoryFileStore
-        val used = ByteSize(fileStore.totalSpace - fileStore.unallocatedSpace)
-        Assertions.assertThat(fileStore.used).isEqualTo(used)
-        Assertions.assertThat(used).isEqualTo(ByteSize(97))
+        val used = DefaultBlockSize(fileStore.totalSpace - fileStore.unallocatedSpace)
+        Assertions.assertThat(fileStore.used()).isEqualTo(used)
+        Assertions.assertThat(used).isEqualTo(DefaultBlockSize(80))
     }
 
     @AfterEach
@@ -77,9 +78,9 @@ internal class MonkeyTest {
         parent.deleteRecursively()
 
         val fileStore = parent.fileSystem.fileStores.first() as MemoryFileStore
-        val used = ByteSize(fileStore.totalSpace - fileStore.unallocatedSpace)
-        Assertions.assertThat(fileStore.used).isEqualTo(used)
-        Assertions.assertThat(used).isEqualTo(ByteSize(97))
+        val used = DefaultBlockSize(fileStore.totalSpace - fileStore.unallocatedSpace)
+        Assertions.assertThat(fileStore.used()).isEqualTo(used)
+        Assertions.assertThat(used).isEqualTo(DefaultBlockSize(80))
     }
 
     @Test
@@ -88,20 +89,28 @@ internal class MonkeyTest {
         val root = Path.of(URI.create("jsmsfs:///"))
         val fileStore = root.fileSystem.fileStores.first() as MemoryFileStore
 
+//        val futures = CopyOnWriteArrayList<Future<*>>()
+//        val pool = Executors.newWorkStealingPool()
         repeat(repeats) {
-            while (fileStore.reservedSpaceFactor > 0.9) {
-                registry.deleteRandom()
-            }
-            registry.createRandom()
-            registry.checkRandomFile()
-            registry.checkRandomLink()
+//            val submit: Future<*> = pool.submit {
+                while (fileStore.reservedSpaceFactor > 0.9) {
+                    registry.deleteRandom()
+                }
+                registry.createRandom()
+                registry.checkRandomFile()
+                registry.checkRandomLink()
+//            }
+//            futures.add(submit)
         }
+//        for (future in futures) {
+//            future.get()
+//        }
 
         log.info("files {} + {} + {} = {}", registry.regular.size, registry.directories.size, registry.links.size, registry.count())
         log.info("fragments: {}", fileStore.reservedCount)
-        log.info("reserved space {}", fileStore.reservedSpaceFactor)
-        log.info("metadata space {}", fileStore.metadataSpaceFactor)
-        log.info("wasted space {}", fileStore.wastedSpaceFactor)
+        log.info("reserved space: {}", fileStore.reservedSpaceFactor)
+        log.info("metadata space: {}", fileStore.metadataSpaceFactor)
+        log.info("wasted space: {}", fileStore.wastedSpaceFactor)
     }
 
 }
